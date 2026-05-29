@@ -1,0 +1,23 @@
+#+title: Re frame query TODOs
+
+* TODO Support single event hook types for mutations
+#+begin_src clojure
+;; currently
+[:dispatch [::rfq/execute-mutation
+                         :headcount/bulk-archive
+                         {:headcount-updates items-with-versions}
+                         {:on-success [[::bulk-archive-success]]
+                          :on-failure [[::bulk-archive-failure]]}]]
+
+;; We should also support
+[:dispatch [::rfq/execute-mutation
+                         :headcount/bulk-archive
+                         {:headcount-updates items-with-versions}
+                         {:on-success [::bulk-archive-success]
+                          :on-failure [::bulk-archive-failure]}]]
+
+
+#+end_src
+
+* TODO Support deduplicating mutations with a parameter
+If the same mutation with the same params is already in flight, deduplicate it.

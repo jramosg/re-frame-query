@@ -3,6 +3,15 @@ packages:
 
 nodeLinker: hoisted
 
+# esbuild and msw need their install scripts to run — esbuild fetches its
+# platform binary (used by `pnpm run mocks`), msw installs the service worker.
+# pnpm 10 reads onlyBuiltDependencies; pnpm 11 replaced it with allowBuilds and
+# errors out (ERR_PNPM_IGNORED_BUILDS) when a build script is neither approved
+# nor explicitly denied. Both keys are kept so either version installs cleanly.
 onlyBuiltDependencies:
   - esbuild
   - msw
+
+allowBuilds:
+  esbuild: true
+  msw: true

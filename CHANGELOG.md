@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-31
+
 ### Added
 - Mutation lifecycle hooks accept a single event vector: `{:on-success [::saved]}`. The multi-event form `{:on-success [[::saved] [::toast]]}` still works.
 
@@ -161,7 +163,8 @@ Initial public release.
 - 80 unit tests (371 assertions), 60 Playwright e2e tests
 - GitHub Actions CI with parallel unit + e2e jobs
 
-[unreleased]: https://github.com/shipclojure/re-frame-query/compare/v0.10.1...HEAD
+[unreleased]: https://github.com/shipclojure/re-frame-query/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/shipclojure/re-frame-query/compare/v0.10.0...v0.11.0
 [0.10.1]: https://github.com/shipclojure/re-frame-query/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/shipclojure/re-frame-query/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/shipclojure/re-frame-query/compare/v0.8.0...v0.9.0

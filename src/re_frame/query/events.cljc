@@ -114,13 +114,11 @@
 
 (defn- dispatch-hooks
   "Build :fx entries for dispatching lifecycle hook events.
-   Each hook event vector gets `args` conj'd onto it.
-   Returns [] when no hooks are configured."
-  [hook-events & args]
-  (if (seq hook-events)
-    (mapv (fn [ev] [:dispatch (into ev args)])
-          hook-events)
-    []))
+   `hook` is a single event vector or a collection of them; each event
+   gets `args` conj'd onto it. Returns [] when no hooks are configured."
+  [hook & args]
+  (mapv (fn [ev] [:dispatch (into ev args)])
+        (util/normalize-hook-events hook)))
 
 (rf/reg-event-fx
   :re-frame.query/execute-mutation

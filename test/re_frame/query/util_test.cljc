@@ -133,3 +133,19 @@
                [:my.app/some-event :foo :bar])))
     (is (nil? (util/parse-result-event [])))
     (is (nil? (util/parse-result-event nil)))))
+
+(deftest normalize-hook-events-test
+  (testing "single event vector is wrapped"
+    (is (= [[:my/hook]] (util/normalize-hook-events [:my/hook])))
+    (is (= [[:my/hook "extra" 42]]
+           (util/normalize-hook-events [:my/hook "extra" 42]))))
+
+  (testing "collection of event vectors is returned as a vector"
+    (is (= [[:my/hook-a] [:my/hook-b "extra"]]
+           (util/normalize-hook-events [[:my/hook-a] [:my/hook-b "extra"]])))
+    (is (= [[:my/hook-a]]
+           (util/normalize-hook-events (list [:my/hook-a])))))
+
+  (testing "nil and empty are no hooks"
+    (is (= [] (util/normalize-hook-events nil)))
+    (is (= [] (util/normalize-hook-events [])))))

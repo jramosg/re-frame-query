@@ -133,12 +133,12 @@ On invalidation, all loaded pages are re-fetched sequentially with fresh cursors
 
 ```clojure
 (rf/dispatch [::rfq/execute-mutation :todos/toggle {:id 5 :done true}
-              {:on-start   [[:todos/optimistic-patch]]   ;; receives params
-               :on-success [[:todos/clear-snapshot]]     ;; receives params, data
-               :on-failure [[:todos/rollback]]}])        ;; receives params, error
+              {:on-start   [:todos/optimistic-patch]   ;; receives params
+               :on-success [:todos/clear-snapshot]     ;; receives params, data
+               :on-failure [:todos/rollback]}])        ;; receives params, error
 ```
 
-Hooks are vectors of event vectors. Each hook event gets args conj'd onto it — **always** `params`, plus `data` for `:on-success` or `error` for `:on-failure`. Handler signatures:
+Each hook takes one event vector. Pass a vector of event vectors — `{:on-success [[:hook-a] [:hook-b]]}` — to dispatch several. Each hook event gets args conj'd onto it — **always** `params`, plus `data` for `:on-success` or `error` for `:on-failure`. Handler signatures:
 
 ```clojure
 (fn [_ [_ params]] ...)           ;; :on-start
@@ -146,7 +146,7 @@ Hooks are vectors of event vectors. Each hook event gets args conj'd onto it —
 (fn [_ [_ params error]] ...)     ;; :on-failure
 
 ;; With pre-bound args — rfq's args come AFTER yours:
-;; dispatch: {:on-success [[:my/hook pre-1 pre-2]]}
+;; dispatch: {:on-success [:my/hook pre-1 pre-2]}
 (fn [_ [_ pre-1 pre-2 params data]] ...)
 ```
 
@@ -162,9 +162,9 @@ Use mutation lifecycle hooks + `rfq-db` inside your event handlers:
 
 ```clojure
 (rf/dispatch [::rfq/execute-mutation :todos/toggle {:id 5 :done true}
-              {:on-start   [[:todos/optimistic-patch]]
-               :on-success [[:todos/clear-snapshot]]
-               :on-failure [[:todos/rollback]]}])
+              {:on-start   [:todos/optimistic-patch]
+               :on-success [:todos/clear-snapshot]
+               :on-failure [:todos/rollback]}])
 ```
 
 ## Observing Query Lifecycle

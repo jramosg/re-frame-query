@@ -1,6 +1,10 @@
 #+title: Re frame query TODOs
 
-* TODO Support single event hook types for mutations
+* DONE Support single event hook types for mutations
+CLOSED: [2026-07-31 Fri 15:18]
+:LOGBOOK:
+- State "DONE"       from "TODO"       [2026-07-31 Fri 15:18]
+:END:
 #+begin_src clojure
 ;; currently
 [:dispatch [::rfq/execute-mutation

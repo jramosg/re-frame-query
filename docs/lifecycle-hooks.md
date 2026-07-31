@@ -11,9 +11,9 @@ Pass an opts map as the third argument to `execute-mutation` to hook into the mu
 
 ```clojure
 (rf/dispatch [::rfq/execute-mutation :todos/toggle {:id 5 :done true}
-              {:on-start   [[:my-app/on-start-event]]
-               :on-success [[:my-app/on-success-event]]
-               :on-failure [[:my-app/on-failure-event]]}])
+              {:on-start   [:my-app/on-start-event]
+               :on-success [:my-app/on-success-event]
+               :on-failure [:my-app/on-failure-event]}])
 ```
 
 | Hook | When | Args conj'd onto each event vector |
@@ -22,7 +22,17 @@ Pass an opts map as the third argument to `execute-mutation` to hook into the mu
 | `:on-success` | After mutation succeeds | `params`, `response-data` |
 | `:on-failure` | After mutation fails | `params`, `error` |
 
-Each hook is a vector of event vectors — all events in the vector are dispatched. Hooks are optional; omitting the opts map works exactly as before.
+Each hook takes a single event vector. Hooks are optional; omitting the opts map works exactly as before.
+
+### Multiple events per hook
+
+To dispatch several events from one hook, pass a vector of event vectors — all of them are dispatched:
+
+```clojure
+(rf/dispatch [::rfq/execute-mutation :todos/toggle {:id 5 :done true}
+              {:on-success [[:my-app/refresh-badge]
+                            [:my-app/toast "Saved"]]}])
+```
 
 ### Hook Handler Signatures
 
@@ -33,7 +43,7 @@ If you pre-bind data in the hook event vector, those values sit *before* rfq's a
 ```clojure
 ;; Dispatch:
 [::rfq/execute-mutation :todos/toggle {:id 5}
- {:on-success [[:my/hook extra-1 extra-2]]}]
+ {:on-success [:my/hook extra-1 extra-2]}]
 
 ;; Hook handler receives:
 (fn [cofx [_ extra-1 extra-2 mutation-params response]] ...)
@@ -56,7 +66,7 @@ If you pre-bind data in the hook event vector, those values sit *before* rfq's a
 
 ;; With pre-bound args (e.g. a user-supplied callback fn)
 (rf/dispatch [::rfq/execute-mutation :todos/add {:title "x"}
-              {:on-success [[:my/on-success some-data]]}])
+              {:on-success [:my/on-success some-data]}])
 
 (rf/reg-event-fx :my/on-success
   (fn [_ [_ some-data params response]] ...))
@@ -89,8 +99,8 @@ Use lifecycle hooks + `set-query-data` to build optimistic updates in pure re-fr
 
 ;; 2. Dispatch mutation with hooks
 (rf/dispatch [::rfq/execute-mutation :todos/toggle {:id 5 :done true}
-              {:on-start   [[:todos/optimistic-toggle]]
-               :on-failure [[:todos/rollback]]}])
+              {:on-start   [:todos/optimistic-toggle]
+               :on-failure [:todos/rollback]}])
 ```
 
 The checkbox toggles instantly. If the server rejects, the snapshot is restored. No library magic — just re-frame events and data.

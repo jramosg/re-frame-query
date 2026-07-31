@@ -56,6 +56,15 @@
   [query-config]
   (boolean (:infinite query-config)))
 
+(defn normalize-hook-events
+  "Normalizes a mutation hook value into a vector of event vectors.
+   Accepts a single event vector `[:evt ...]` or a collection of them."
+  [hook]
+  (cond
+    (empty? hook) []
+    (keyword? (first hook)) [hook]
+    :else (vec hook)))
+
 (defn parse-result-event
   "Parses one of the four rfq query result events into a map, hiding the
    positional event-vector shape from callers (interceptors, telemetry, etc.).

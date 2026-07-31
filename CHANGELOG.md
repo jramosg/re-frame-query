@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- Mutation lifecycle hooks accept a single event vector: `{:on-success [::saved]}`. The multi-event form `{:on-success [[::saved] [::toast]]}` still works.
+
 ## [0.10.1 - 2026-05-04]
 
 ### Fixed

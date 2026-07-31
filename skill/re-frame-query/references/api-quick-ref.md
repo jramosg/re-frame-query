@@ -121,10 +121,13 @@
 
 ```clojure
 (rf/dispatch [::rfq/execute-mutation :todos/toggle {:id 5 :done true}
-              {:on-start   [[:my/on-start-event]]    ;; receives params
-               :on-success [[:my/on-success-event]]  ;; receives params, data
-               :on-failure [[:my/on-failure-event]]  ;; receives params, error
+              {:on-start   [:my/on-start-event]    ;; receives params
+               :on-success [:my/on-success-event]  ;; receives params, data
+               :on-failure [:my/on-failure-event]  ;; receives params, error
                }])
+
+;; Several events per hook — pass a vector of event vectors
+{:on-success [[:my/refresh-badge] [:my/toast "Saved"]]}
 ```
 
 Handler signatures — rfq's args are appended **after** any pre-bound args in the hook event vector:
@@ -133,7 +136,7 @@ Handler signatures — rfq's args are appended **after** any pre-bound args in t
 (fn [_ [_ params]] ...)                ;; :on-start
 (fn [_ [_ params data]] ...)           ;; :on-success
 (fn [_ [_ params error]] ...)          ;; :on-failure
-(fn [_ [_ pre-1 pre-2 params data]] ...) ;; if dispatched with [[:hook pre-1 pre-2]]
+(fn [_ [_ pre-1 pre-2 params data]] ...) ;; if dispatched with [:hook pre-1 pre-2]
 ```
 
 > ⚠️ **Not the same as day8/http-fx.** http-fx appends only `response` to `:on-success`; rfq appends `params` then `data`. Copy/pasted http-fx success handlers will silently bind the mutation-params map to the `response` slot and drop the real response. See [docs/lifecycle-hooks.md](https://github.com/shipclojure/re-frame-query/blob/main/docs/lifecycle-hooks.md) for the full migration checklist.

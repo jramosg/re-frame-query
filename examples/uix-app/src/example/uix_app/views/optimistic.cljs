@@ -45,9 +45,9 @@
                                (rf/dispatch
                                 [::rfq/execute-mutation :todos/toggle
                                  {:id id :done (not done) :fail-mode? fail-mode?}
-                                 {:on-start [[:todos/optimistic-toggle]]
-                                  :on-success [[:todos/clear-snapshot]]
-                                  :on-failure [[:todos/rollback]]}]))})
+                                 {:on-start [:todos/optimistic-toggle]
+                                  :on-success [:todos/clear-snapshot]
+                                  :on-failure [:todos/rollback]}]))})
        ($ :span {:style (cond-> {:font-size "0.95rem"}
                           done (assoc :text-decoration "line-through"
                                       :color "#999"))}

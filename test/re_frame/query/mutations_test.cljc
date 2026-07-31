@@ -272,6 +272,60 @@
        (is (= {:hook :a :params {:title "Dune"} :error {:status 500}} (first @calls)))
        (is (= {:hook :b :extra "ctx" :params {:title "Dune"} :error {:status 500}} (second @calls)))))))
 
+(deftest mutation-single-event-hooks-test
+  (testing "a single on-start event vector receives params"
+    (rf-test/run-test-sync
+     (let [calls (atom [])]
+       (rf/reg-event-db :test/on-start
+         (fn [db [_ params]] (swap! calls conj {:params params}) db))
+       (rfq/set-default-effect-fn! h/noop-effect-fn)
+       (rfq/reg-mutation :books/create {:mutation-fn (fn [_] {})})
+       (rf/dispatch [:re-frame.query/execute-mutation :books/create {:title "Dune"}
+                     {:on-start [:test/on-start]}])
+       (is (= [{:params {:title "Dune"}}] @calls)))))
+
+  (testing "a single on-success event vector receives params and response"
+    (rf-test/run-test-sync
+     (let [calls (atom [])]
+       (rf/reg-event-db :test/on-success
+         (fn [db [_ params data]] (swap! calls conj {:params params :data data}) db))
+       (rfq/set-default-effect-fn! h/noop-effect-fn)
+       (rfq/reg-mutation :books/create {:mutation-fn (fn [_] {})})
+       (rf/dispatch [:re-frame.query/execute-mutation :books/create {:title "Dune"}
+                     {:on-success [:test/on-success]}])
+       (rf/dispatch [:re-frame.query/mutation-success :books/create {:title "Dune"}
+                     {:on-success [:test/on-success]}
+                     {:id 1 :title "Dune"}])
+       (is (= [{:params {:title "Dune"} :data {:id 1 :title "Dune"}}] @calls)))))
+
+  (testing "a single on-failure event vector receives params and error"
+    (rf-test/run-test-sync
+     (let [calls (atom [])]
+       (rf/reg-event-db :test/on-failure
+         (fn [db [_ params error]] (swap! calls conj {:params params :error error}) db))
+       (rfq/set-default-effect-fn! h/noop-effect-fn)
+       (rfq/reg-mutation :books/create {:mutation-fn (fn [_] {})})
+       (rf/dispatch [:re-frame.query/execute-mutation :books/create {:title "Dune"}
+                     {:on-failure [:test/on-failure]}])
+       (rf/dispatch [:re-frame.query/mutation-failure :books/create {:title "Dune"}
+                     {:on-failure [:test/on-failure]}
+                     {:status 500}])
+       (is (= [{:params {:title "Dune"} :error {:status 500}}] @calls)))))
+
+  (testing "a single event vector with pre-bound args keeps them before rfq's args"
+    (rf-test/run-test-sync
+     (let [calls (atom [])]
+       (rf/reg-event-db :test/on-success
+         (fn [db [_ extra params data]]
+           (swap! calls conj {:extra extra :params params :data data})
+           db))
+       (rfq/set-default-effect-fn! h/noop-effect-fn)
+       (rfq/reg-mutation :books/create {:mutation-fn (fn [_] {})})
+       (rf/dispatch [:re-frame.query/mutation-success :books/create {:title "Dune"}
+                     {:on-success [:test/on-success "ctx"]}
+                     {:id 1}])
+       (is (= [{:extra "ctx" :params {:title "Dune"} :data {:id 1}}] @calls))))))
+
 (deftest mutation-hooks-optional-test
   (testing "omitting opts works exactly as before (backwards compatible)"
     (let [captured (atom nil)]

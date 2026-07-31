@@ -9,13 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Mutation lifecycle hooks accept a single event vector: `{:on-success [::saved]}`. The multi-event form `{:on-success [[::saved] [::toast]]}` still works.
 
-## [0.10.1 - 2026-05-04]
+## [0.10.1] - 2026-05-04
 
 ### Fixed
 - Include clj-kondo hooks in the build jar to be imported in target projects
 
 
-## [0.10.0 - 2026-05-04]
+## [0.10.0] - 2026-05-04
 
 ### Fixed
 - `::rfq/mark-inactive` is now a noop if no active query with the caller params exists. Previously would not check this
@@ -27,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ```
   This copies the hooks into `.clj-kondo/imports/` automatically. No manual config required.
 
-## [0.9.0 - 2026-04-26]
+## [0.9.0] - 2026-04-26
 
 ### Changed
 
@@ -160,3 +160,17 @@ Initial public release.
 - Reagent and UIx example apps with 8 tabs each
 - 80 unit tests (371 assertions), 60 Playwright e2e tests
 - GitHub Actions CI with parallel unit + e2e jobs
+
+[unreleased]: https://github.com/shipclojure/re-frame-query/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/shipclojure/re-frame-query/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/shipclojure/re-frame-query/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/shipclojure/re-frame-query/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/shipclojure/re-frame-query/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/shipclojure/re-frame-query/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/shipclojure/re-frame-query/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/shipclojure/re-frame-query/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/shipclojure/re-frame-query/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/shipclojure/re-frame-query/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/shipclojure/re-frame-query/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/shipclojure/re-frame-query/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/shipclojure/re-frame-query/releases/tag/v0.1.0

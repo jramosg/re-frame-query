@@ -1,20 +1,38 @@
-{:paths ["src" "resources"]
+{:paths ["bb"]
  :deps {com.lambdaisland/dotenv {:mvn/version "0.2.5"}}
 
  :tasks
- {jar {:doc "Build JAR with latest version"
-       :task (clojure "-T:build jar")}
-  install {:doc "Install JAR locally"
-           :task (clojure "-T:build install")}
-  deploy {:doc "Deploy the latest release to Clojars"
-          :task (clojure "-T:build deploy")}
-  pom {:doc "Generate pom.xml from deps.edn"
-       :task (clojure "-X:deps mvn-pom")}
+ {build {:doc "Build the library jar into target/ (version from the latest v* git tag)."
+         :task (clojure "-T:build build")}
+
+  install {:doc "Build and install the jar into ~/.m2. Defaults to the latest v* tag, which shadows that released artifact — pass a version for unreleased code. Usage: bb install [0.11.0-SNAPSHOT]"
+           :task (if-let [version (first *command-line-args*)]
+                   (clojure "-T:build" "install" ":version" (pr-str version))
+                   (clojure "-T:build" "install"))}
+
+  tag {:doc "Prepare and publish a release: promote the changelog's Unreleased section, bump the README, then commit, tag and push. Usage: bb tag 0.11.0"
+       :requires ([make])
+       :task (apply make/tag *command-line-args*)}
+
+  changelog-entry {:doc "Print one release's changelog section, for GitHub release notes. Defaults to the latest tag."
+                   :requires ([make])
+                   :task (apply make/changelog-entry *command-line-args*)}
+
+  release {:doc "Build and deploy the library to Clojars. Reads the deploy token from 1Password, so `op` must be installed and signed in."
+           :requires ([make])
+           :task (shell {:extra-env
+                         {"CLOJARS_USERNAME" "ovistoica"
+                          "CLOJARS_PASSWORD" (make/op-read "op://Personal/Clojars Token/credential")}}
+                        "clojure -T:build release")}
+
   fmt {:doc "Format all Clojure files with cljfmt"
-       :task (shell "cljfmt" "fix" "src" "test" "examples")}
+       :task (shell "cljfmt" "fix" "src" "test" "examples" "bb" "build.clj")}
+
   fmt:check {:doc "Check formatting without modifying files"
-             :task (shell "cljfmt" "check" "src" "test" "examples")}
+             :task (shell "cljfmt" "check" "src" "test" "examples" "bb" "build.clj")}
+
   test:unit {:doc "Run ClojureScript unit tests via shadow-cljs"
              :task (shell "pnpm" "test")}
+
   test:e2e {:doc "Run Playwright e2e tests against both example apps"
             :task (shell "pnpm" "test:e2e")}}}

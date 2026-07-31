@@ -6,22 +6,35 @@ CLOSED: [2026-07-31 Fri 15:18]
 - State "DONE"       from "TODO"       [2026-07-31 Fri 15:18]
 :END:
 #+begin_src clojure
-;; currently
+  ;; currently
 [:dispatch [::rfq/execute-mutation
-                         :headcount/bulk-archive
-                         {:headcount-updates items-with-versions}
-                         {:on-success [[::bulk-archive-success]]
-                          :on-failure [[::bulk-archive-failure]]}]]
+            :headcount/bulk-archive
+            {:headcount-updates items-with-versions}
+            {:on-success [[::bulk-archive-success]]
+             :on-failure [[::bulk-archive-failure]]}]]
 
-;; We should also support
-[:dispatch [::rfq/execute-mutation
-                         :headcount/bulk-archive
-                         {:headcount-updates items-with-versions}
-                         {:on-success [::bulk-archive-success]
-                          :on-failure [::bulk-archive-failure]}]]
+  ;; We should also support
+  [:dispatch [::rfq/execute-mutation
+              :headcount/bulk-archive
+              {:headcount-updates items-with-versions}
+              {:on-success [::bulk-archive-success]
+               :on-failure [::bulk-archive-failure]}]]
 
 
 #+end_src
 
+* TODO Check if literal tags without a function are supported
+#+begin_src clojure
+:tags #{[:todo :hello]}
+#+end_src
+
+
 * TODO Support deduplicating mutations with a parameter
 If the same mutation with the same params is already in flight, deduplicate it.
+#+begin_src clojure
+    [:dispatch [::rfq/execute-mutation :headcount/bulk-archive
+                {:headcount-updates items-with-versions}
+                {:dedup? true
+                 :on-success [::bulk-archive-success]
+                 :on-failure [::bulk-archive-failure]}]]
+#+end_src

@@ -15,6 +15,11 @@ re-frame-query is a TanStack Query / RTK Query inspired library for re-frame. Al
 
 **Key pattern:** register a query once with `rfq/reg-query`, then subscribe with `[::rfq/query k params]` — subscribing triggers fetch, caching, refetch, and GC automatically.
 
+Adapter-backed regular query attempts carry request generations, so late
+callbacks cannot overwrite a newer attempt for the same exact query. The
+effect adapter receives `:re-frame.query/request-control` and may abort the
+older transport handle for that identity.
+
 ## Setup Pattern
 
 ```clojure
@@ -86,6 +91,9 @@ Polling can be started either via subscription opts or via `mark-active`:
 ```
 
 Polling skips a tick when a request is already in-flight (prevents stale-response races). Set `:polling-mode :force` on the query config to restore unconditional polling. Infinite queries do not support polling.
+
+Use distinct cache identities for pages and filters. They may fetch
+independently and populate their own reusable cache entries.
 
 ## Inline Cache Operations (`re-frame.query.db`)
 

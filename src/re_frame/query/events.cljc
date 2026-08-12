@@ -12,16 +12,50 @@
 ;; Query Events
 ;; ---------------------------------------------------------------------------
 
-(defn- build-query-effects [query-config k params]
+(def ^:private request-id-key
+  :re-frame.query/request-id)
+
+(defn- start-query-attempt
+  [db k params query-state]
+  (let [qid (util/query-id k params)
+        request-id (random-uuid)]
+    [(update-in db [:re-frame.query/queries qid]
+                (fn [query]
+                  (util/merge-with-default
+                   query
+                   (assoc query-state request-id-key request-id))))
+     request-id]))
+
+(defn- attempt-event [event request-id]
+  (with-meta event {request-id-key request-id}))
+
+(defn- request-control [k params request-id]
+  {:query-id (util/query-id k params)
+   :request-id request-id})
+
+(defn- build-query-effects
+  [query-config k params request-id]
   (let [query-fn (:query-fn query-config)
         effect-fn (or (:effect-fn query-config)
                       (registry/get-default-effect-fn))
         request (query-fn params)]
     (if effect-fn
-      (effect-fn request
-                 [:re-frame.query/query-success k params]
-                 [:re-frame.query/query-failure k params])
+      (effect-fn (assoc request
+                        :re-frame.query/request-control
+                        (request-control k params request-id))
+                 (attempt-event
+                  [:re-frame.query/query-success k params]
+                  request-id)
+                 (attempt-event
+                  [:re-frame.query/query-failure k params]
+                  request-id))
       request)))
+
+(defn- current-attempt? [db qid event]
+  (let [request-id (get (meta event) request-id-key)]
+    (or (nil? request-id)
+        (= request-id
+           (get-in db [:re-frame.query/queries qid request-id-key])))))
 
 (rf/reg-event-fx
   :re-frame.query/ensure-query
@@ -36,12 +70,16 @@
       (if (and (util/stale? query now)
                (not (:fetching? query)))
         (let [refreshing? (and (= :success (:status query))
-                               (some? (:data query)))]
-          (merge {:db (update-in db [:re-frame.query/queries qid] util/merge-with-default
-                                 {:status (if refreshing? :success :loading)
-                                  :fetching? true
-                                  :stale? false})}
-                 (build-query-effects query-config k params)))
+                               (some? (:data query)))
+              [db* request-id]
+              (start-query-attempt
+               db k params
+               {:status (if refreshing? :success :loading)
+                :fetching? true
+                :stale? false})]
+          (merge {:db db*}
+                 (build-query-effects query-config k params
+                                      request-id)))
         {:db db}))))
 
 (defn- refetch-effects
@@ -51,12 +89,16 @@
   (let [qid (util/query-id k params)
         query (get-in db [:re-frame.query/queries qid])
         refreshing? (and (= :success (:status query))
-                         (some? (:data query)))]
-    (merge {:db (update-in db [:re-frame.query/queries qid] merge
-                           {:status (if refreshing? :success :loading)
-                            :fetching? true
-                            :stale? false})}
-           (build-query-effects query-config k params))))
+                         (some? (:data query)))
+        [db* request-id]
+        (start-query-attempt
+         db k params
+         {:status (if refreshing? :success :loading)
+          :fetching? true
+          :stale? false})]
+    (merge {:db db*}
+           (build-query-effects query-config k params
+                                request-id))))
 
 (rf/reg-event-fx
   :re-frame.query/refetch-query
@@ -77,36 +119,52 @@
 
 (rf/reg-event-db
   :re-frame.query/query-success
-  (fn [db [_ k params data]]
+  (fn [db [_ k params data :as event]]
     (let [qid (util/query-id k params)
           query-config (registry/get-query k)
           now (util/now-ms)
           tags-fn (or (:tags query-config) (constantly []))
           tags (set (tags-fn params))
           transform-fn (:transform-response query-config)]
-      (update-in db [:re-frame.query/queries qid]
-                 util/merge-with-default
-                 {:status :success
-                  :data (cond-> data (fn? transform-fn) (transform-fn params))
-                  :error nil
-                  :fetching? false
-                  :fetched-at now
-                  :stale? false
-                  :tags tags
-                  :stale-time-ms (:stale-time-ms query-config)
-                  :cache-time-ms (or (:cache-time-ms query-config)
-                                     gc/default-cache-time-ms)}))))
+      (if (current-attempt? db qid event)
+        (update-in db [:re-frame.query/queries qid]
+                   (fn [query]
+                     (-> (util/merge-with-default
+                          query
+                          {:status :success
+                           :data (cond-> data
+                                   (fn? transform-fn)
+                                   (transform-fn params))
+                           :error nil
+                           :fetching? false
+                           :fetched-at now
+                           :stale? false
+                           :tags tags
+                           :stale-time-ms (:stale-time-ms query-config)
+                           :cache-time-ms
+                           (or (:cache-time-ms query-config)
+                               gc/default-cache-time-ms)})
+                         (dissoc request-id-key))))
+        db))))
 
 (rf/reg-event-db
   :re-frame.query/query-failure
-  (fn [db [_ k params error]]
+  (fn [db [_ k params error :as event]]
     (let [qid (util/query-id k params)
           query-config (registry/get-query k)
           transform-fn (:transform-error query-config)]
-      (update-in db [:re-frame.query/queries qid] util/merge-with-default
-                 {:status :error
-                  :error (cond-> error (fn? transform-fn) (transform-fn params))
-                  :fetching? false}))))
+      (if (current-attempt? db qid event)
+        (update-in db [:re-frame.query/queries qid]
+                   (fn [query]
+                     (-> (util/merge-with-default
+                          query
+                          {:status :error
+                           :error (cond-> error
+                                    (fn? transform-fn)
+                                    (transform-fn params))
+                           :fetching? false})
+                         (dissoc request-id-key))))
+        db))))
 
 ;; ---------------------------------------------------------------------------
 ;; Mutation Events

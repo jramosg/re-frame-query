@@ -105,6 +105,12 @@ With `(:require [re-frame.query :as rfq])`, use `::rfq/` shorthand:
  :cache-time-ms <ms>}
 ```
 
+While a regular query is fetching, its app-db entry also contains the
+namespaced implementation key `:re-frame.query/request-id`. It is removed when
+the current attempt finishes. Effect adapters receive the related
+`:re-frame.query/request-control` request value documented in
+[Request Attempts](request-attempts.md).
+
 ## Event Introspection
 
 | Function | Description |

@@ -82,6 +82,12 @@
     - `on-failure` — a re-frame event vector to dispatch on failure (error data
                      should be `conj`'d onto it)
 
+  For regular queries, `request` also contains
+  `:re-frame.query/request-control` with the exact `:query-id` and unique
+  `:request-id`. A transport may use them to cancel the previous attempt for
+  that exact query. Preserve the supplied callback-vector metadata by
+  appending results with `conj` or `into` rather than rebuilding the vectors.
+
   Must return a re-frame effects map.
 
   Example for an `:http` effect:
@@ -106,7 +112,8 @@
     (when-not (keyword? k)
       (throw (ex-info "Query key must be a keyword" {:key k})))
     (when-not (fn? (:query-fn config))
-      (throw (ex-info (str "Query " k " must have a :query-fn function") {:key k})))))
+      (throw (ex-info (str "Query " k " must have a :query-fn function")
+                      {:key k})))))
 
 (defn- validate-mutations! [mutations]
   (doseq [[k config] mutations]

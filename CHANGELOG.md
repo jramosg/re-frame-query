@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Regular query attempts now carry generation metadata. Late success or
+  failure callbacks from an older forced refetch are ignored.
+- Effect adapters receive `:re-frame.query/request-control` so transports can
+  abort a previous attempt for the same exact query while keeping browser
+  handles outside app-db.
+
 ## [0.11.0] - 2026-07-31
 
 ### Added

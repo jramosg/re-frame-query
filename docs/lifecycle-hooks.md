@@ -109,6 +109,11 @@ The checkbox toggles instantly. If the server rejects, the snapshot is restored.
 
 ## Advanced: Cancelling In-Flight Requests
 
+Regular query refetches carry exact-query request control for transport
+adapters. See [Request Attempts](request-attempts.md). The recipe below remains
+useful when a mutation hook must explicitly cancel a query before applying an
+optimistic cache update.
+
 TanStack Query solves the optimistic update race with `cancelQueries`, which aborts in-flight HTTP requests via `AbortController`. Since re-frame-query is transport-agnostic, cancellation lives in your transport layer — not in the library. Here's the pattern:
 
 ```clojure

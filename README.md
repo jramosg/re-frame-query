@@ -14,6 +14,8 @@ Declarative data fetching and caching for [re-frame](https://github.com/day8/re-
 - **Conditional fetching** — skip queries with `:skip? true` until a condition is met (e.g., dependent queries)
 - **Prefetching** — pre-populate the cache before a component subscribes (on hover, route transition, etc.)
 - **Smart status tracking** — distinguishes initial loading from background refetching
+- **Request generations** — late responses cannot overwrite a newer refetch of
+  the same exact query
 - **Transport-agnostic** — works with any re-frame effect (HTTP, GraphQL, WebSocket, etc.)
 - **All state in re-frame DB** — predictable, inspectable, time-travel debuggable
 - **Infinite queries** — cursor-based pagination with automatic sequential re-fetch on invalidation, sliding window support
@@ -140,6 +142,7 @@ On success, mutations automatically invalidate matching tags — all active quer
 |---|---|
 | [API Reference](docs/api-reference.md) | Events, subscriptions, config keys, query state shape |
 | [Status Tracking](docs/status-tracking.md) | How `:status` and `:fetching?` distinguish loading states |
+| [Request Attempts](docs/request-attempts.md) | Exact-query request generations and transport cancellation |
 | [Garbage Collection](docs/garbage-collection.md) | Per-query timer-based cache eviction |
 | [Polling](docs/polling.md) | Query-level, per-subscription, and multi-subscriber polling |
 | [Conditional Fetching](docs/conditional-fetching.md) | `:skip?` for dependent queries |

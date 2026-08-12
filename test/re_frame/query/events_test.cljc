@@ -215,7 +215,13 @@
               :url "/api/books?page=1"
               :on-success [:re-frame.query/query-success :books/list {:page 1}]
               :on-failure [:re-frame.query/query-failure :books/list {:page 1}]}
-             @captured))))
+             (dissoc @captured :re-frame.query/request-control)))
+      (let [{:keys [query-id request-id] :as request-control}
+            (:re-frame.query/request-control @captured)]
+        (is (= [:books/list {:page 1}] query-id))
+        (is (= #{:query-id :request-id}
+               (set (keys request-control))))
+        (is (uuid? request-id)))))
 
   (testing "execute-mutation uses effect-fn to inject success/failure callbacks"
     (let [captured (atom nil)]
@@ -260,7 +266,7 @@
               :url "/api/special"
               :on-success [:re-frame.query/query-success :books/special {}]
               :on-failure [:re-frame.query/query-failure :books/special {}]}
-             @captured)))))
+             (dissoc @captured :re-frame.query/request-control))))))
 
 (deftest effect-fn-fallback-test
   (testing "without effect-fn, query-fn returning a full effects map still works"
@@ -318,7 +324,7 @@
               :url "/api/books?page=1"
               :on-success [:re-frame.query/query-success :books/list {:page 1}]
               :on-failure [:re-frame.query/query-failure :books/list {:page 1}]}
-             @captured))
+             (dissoc @captured :re-frame.query/request-control)))
       ;; Mutation works
       (reset! captured nil)
       (h/process-event [:re-frame.query/execute-mutation :books/create {:title "Dune"}])
@@ -423,6 +429,115 @@
       (is (zero? @call-count)
           "no effect produced when data is fresh"))))
 
+(deftest query-attempt-test
+  (testing "a late forced-refetch response cannot overwrite a newer attempt"
+    (let [calls (atom [])
+          params {:page 1}]
+      (rf/reg-fx :test-http #(swap! calls conj %))
+      (rfq/set-default-effect-fn!
+       (fn [request on-success on-failure]
+         {:test-http (assoc request
+                            :on-success on-success
+                            :on-failure on-failure)}))
+      (rfq/reg-query :patients/page
+        {:query-fn (fn [_] {:url "/api/patients"})})
+
+      (h/process-event
+       [:re-frame.query/refetch-query :patients/page params])
+      (h/process-event
+       [:re-frame.query/refetch-query :patients/page params])
+      (let [[first-request second-request] @calls
+            path [:re-frame.query/queries
+                  (util/query-id :patients/page params)
+                  :data]]
+        (h/process-event
+         (conj (:on-success second-request) [{:id :new}]))
+        (h/process-event
+         (conj (:on-success first-request) [{:id :old}]))
+        (is (= [{:id :new}] (get-in (h/app-db) path))))))
+
+  (testing "different query identities remain independent"
+    (let [calls (atom [])
+          page-1 {:page 1}
+          page-2 {:page 2}]
+      (rf/reg-fx :test-http #(swap! calls conj %))
+      (rfq/set-default-effect-fn!
+       (fn [request on-success on-failure]
+         {:test-http (assoc request
+                            :on-success on-success
+                            :on-failure on-failure)}))
+      (rfq/reg-query :patients/independent-page
+        {:query-fn (fn [params] {:params params})})
+
+      (h/process-event
+       [:re-frame.query/ensure-query
+        :patients/independent-page page-1])
+      (h/process-event
+       [:re-frame.query/ensure-query
+        :patients/independent-page page-2])
+
+      (let [[first-request second-request] @calls
+            first-qid (util/query-id
+                       :patients/independent-page page-1)
+            second-qid (util/query-id
+                        :patients/independent-page page-2)]
+        (is (= first-qid
+               (get-in first-request
+                       [:re-frame.query/request-control :query-id])))
+        (is (= second-qid
+               (get-in second-request
+                       [:re-frame.query/request-control :query-id])))
+        (is (true? (get-in (h/app-db)
+                           [:re-frame.query/queries
+                            first-qid :fetching?])))
+        (is (true? (get-in (h/app-db)
+                           [:re-frame.query/queries
+                            second-qid :fetching?])))
+
+        (h/process-event
+         (conj (:on-success first-request) [{:id 1}]))
+        (h/process-event
+         (conj (:on-success second-request) [{:id 2}]))
+        (is (= [{:id 1}]
+               (get-in (h/app-db)
+                       [:re-frame.query/queries first-qid :data])))
+        (is (= [{:id 2}]
+               (get-in (h/app-db)
+                       [:re-frame.query/queries second-qid :data])))))))
+
+(deftest cached-query-navigation-test
+  (testing "a fresh previously visited page is returned without refetching"
+    (let [calls (atom [])
+          page-1 {:page 1}
+          page-2 {:page 2}]
+      (rf/reg-fx :test-http #(swap! calls conj %))
+      (rfq/set-default-effect-fn!
+       (fn [request on-success on-failure]
+         {:test-http (assoc request
+                            :on-success on-success
+                            :on-failure on-failure)}))
+      (rfq/reg-query :patients/page
+        {:query-fn (fn [params] {:params params})
+         :stale-time-ms 30000})
+
+      (h/process-event
+       [:re-frame.query/ensure-query :patients/page page-1])
+      (h/process-event
+       (conj (:on-success (first @calls)) [{:id 1}]))
+      (h/process-event
+       [:re-frame.query/ensure-query :patients/page page-2])
+      (h/process-event
+       (conj (:on-success (second @calls)) [{:id 2}]))
+      (h/process-event
+       [:re-frame.query/ensure-query :patients/page page-1])
+
+      (is (= 2 (count @calls)))
+      (is (= [{:id 1}]
+             (get-in (h/app-db)
+                     [:re-frame.query/queries
+                      (util/query-id :patients/page page-1)
+                      :data]))))))
+
 ;; ---------------------------------------------------------------------------
 ;; Registration error handling tests
 ;; ---------------------------------------------------------------------------
@@ -495,7 +610,7 @@
               :stale? false
               :active? false
               :tags #{}}
-             query))))
+             (dissoc query :re-frame.query/request-id)))))
 
   (testing "Full state shape after query-success"
     (rfq/reg-query :books/list
@@ -556,7 +671,9 @@
                 :tags #{[:books :all]}
                 :stale-time-ms 1000
                 :cache-time-ms 300000}
-               (dissoc query :fetched-at))
+               (dissoc query
+                       :fetched-at
+                       :re-frame.query/request-id))
             "status stays :success, fetching? true, stale data preserved")))))
 
 (deftest mutation-state-shape-test

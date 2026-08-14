@@ -5,6 +5,7 @@
    metadata plumbing every effect adapter depends on."
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
+   [re-frame.core :as rf]
    [re-frame.query :as rfq]
    [re-frame.query.test-helpers :as h]
    [re-frame.query.util :as util]))
@@ -56,6 +57,24 @@
     (rfq/reg-query :patients/page
       {:query-fn (fn [{:keys [page]}]
                    {:method :get :url (str "/api/patients?page=" page)})})
+    calls))
+
+(defn- reg-legacy-patients!
+  "Register a query whose query-fn returns a complete effects map.
+   This is the legacy form that supplies callbacks itself."
+  []
+  (let [calls (atom [])]
+    (rf/reg-fx :test-http #(swap! calls conj %))
+    (rfq/reg-query :patients/legacy
+      {:query-fn
+       (fn [{:keys [page]}]
+         {:test-http
+          {:method :get
+           :url (str "/api/patients?page=" page)
+           :on-success
+           [:re-frame.query/query-success :patients/legacy {:page page}]
+           :on-failure
+           [:re-frame.query/query-failure :patients/legacy {:page page}]}})})
     calls))
 
 (defn- reg-feed!
@@ -196,6 +215,27 @@
         (is (= :error (:status query))
             "an unstamped failure is committed, not swallowed")
         (is (= {:status 500} (:error query)))))))
+
+(deftest legacy-effects-stamp-query-callbacks
+  (testing "full effects maps also protect overlapping attempts"
+    (let [calls (reg-legacy-patients!)
+          qid (util/query-id :patients/legacy {:page 1})]
+      (h/process-event
+       [:re-frame.query/refetch-query :patients/legacy {:page 1}])
+      (h/process-event
+       [:re-frame.query/refetch-query :patients/legacy {:page 1}])
+      (is (= 2 (count @calls)) "precondition: two attempts are in flight")
+      (is (some? (util/request-control
+                  (:on-success (attempt calls 0))))
+          "legacy success callback carries request control")
+      (is (some? (util/request-control
+                  (:on-failure (attempt calls 1))))
+          "legacy failure callback carries request control")
+
+      (deliver! (:on-success (attempt calls 1)) [{:id :fresh}])
+      (deliver! (:on-success (attempt calls 0)) [{:id :stale}])
+      (is (= [{:id :fresh}] (:data (query-entry qid)))
+          "a late legacy response cannot overwrite newer data"))))
 
 (deftest reset-api-state-is-not-resurrected-by-a-stamped-response
   (testing "a stamped in-flight response does not recreate a wiped entry"

@@ -56,6 +56,42 @@
 ;; Query Events
 ;; ---------------------------------------------------------------------------
 
+(defn- event-vector? [value]
+  (and (vector? value)
+       (keyword? (first value))))
+
+(defn- stamp-legacy-callback [callback control]
+  (cond
+    (event-vector? callback)
+    (util/with-request-control callback control)
+
+    (vector? callback)
+    (mapv #(stamp-legacy-callback % control) callback)
+
+    :else callback))
+
+(defn- stamp-legacy-effects
+  "Stamp conventional :on-success/:on-failure callbacks in a full effects map.
+   This keeps the legacy query-fn form protected by request supersession too.
+   Maps and vectors are traversed because re-frame effects may be nested under
+   :fx or a transport-specific effect key."
+  [effects control]
+  (cond
+    (map? effects)
+    (reduce-kv
+     (fn [result key value]
+       (assoc result key
+              (if (#{:on-success :on-failure} key)
+                (stamp-legacy-callback value control)
+                (stamp-legacy-effects value control))))
+     {}
+     effects)
+
+    (vector? effects)
+    (mapv #(stamp-legacy-effects % control) effects)
+
+    :else effects))
+
 (defn- build-query-effects [query-config k params req-id]
   (let [query-fn (:query-fn query-config)
         effect-fn (or (:effect-fn query-config)
@@ -66,7 +102,7 @@
       (effect-fn request
                  (util/with-request-control [:re-frame.query/query-success k params] control)
                  (util/with-request-control [:re-frame.query/query-failure k params] control))
-      request)))
+      (stamp-legacy-effects request control))))
 
 (rf/reg-event-fx
   :re-frame.query/ensure-query
@@ -340,7 +376,7 @@
                  (util/with-request-control on-success-event control)
                  (util/with-request-control
                    [:re-frame.query/infinite-page-failure k params] control))
-      request)))
+      (stamp-legacy-effects request control))))
 
 (defn- apply-max-pages
   "Trim pages/page-params to max-pages (sliding window).

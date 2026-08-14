@@ -17,6 +17,8 @@
                         (see `set-default-effect-fn!`), the library auto-injects
                         success/failure callbacks. Without effect-fn, must return a
                         full re-frame effects map with manual callbacks (legacy).
+                        Conventional callbacks in that map receive the same
+                        request-attempt metadata as adapter-backed queries.
     :effect-fn          (fn [request on-success on-failure] -> effects-map) — optional
                         per-query override of the global adapter. Append results to the
                         callbacks with `conj`/`into` — rebuilding them strips the

@@ -68,6 +68,14 @@ With `(:require [re-frame.query :as rfq])`, use `::rfq/` shorthand:
 | `[::rfq/reset-api-state]` | Clear all queries, mutations, and cancel all GC/polling timers |
 | `[::rfq/reset-mutation k params]` | Clear a mutation's state back to idle |
 | `[::rfq/fetch-next-page k params]` | Fetch and append the next page of an [infinite query](infinite-queries.md) |
+| `[::rfq/cancel-query k params]` | Supersede every in-flight request for a query — responses from it are dropped on arrival, `:fetching?`/`:fetching-next?`/`:fetching-prev?`/`:refetch-state` are cleared, `:data`/`:status`/`:error` are left alone. No-op if the query isn't cached. See [Lifecycle Hooks](lifecycle-hooks.md#advanced-cancelling-in-flight-requests). |
+
+## Cancellation
+
+| Function | Description |
+|---|---|
+| `rfq/cancel-query` | `(rfq/cancel-query k params)` — dispatches `::rfq/cancel-query` above |
+| `re-frame.query.db/cancel-query` | `(cancel-query db k params query-config request-id)` — pure `db -> db` version, for use directly inside your own event handlers to avoid an extra dispatch cycle |
 
 ## Subscriptions
 
@@ -110,13 +118,16 @@ With `(:require [re-frame.query :as rfq])`, use `::rfq/` shorthand:
 | Function | Description |
 |---|---|
 | `rfq/parse-result-event` | `(rfq/parse-result-event event-vec)` — parses one of the four query result events (`::rfq/query-success`, `::rfq/query-failure`, `::rfq/infinite-page-success`, `::rfq/infinite-page-failure`) into a map. Returns `nil` for any other event. Use inside global interceptors so you don't have to positionally destructure rfq event vectors. See [Lifecycle Hooks](lifecycle-hooks.md#observing-query-lifecycle). |
+| `rfq/request-control` | `(rfq/request-control event-vec)` — reads the per-attempt `{:query-id :request-id :issued-at}` stamp off a result callback's metadata, or `nil` if the event carries none. Effect adapters use it to key transport-level state (e.g. an abort handle) by `:query-id`. See [Lifecycle Hooks](lifecycle-hooks.md#advanced-cancelling-in-flight-requests). |
 
-Returned map shapes:
+Returned map shapes (`rfq/parse-result-event`):
 
 | Event | Map |
 |---|---|
-| `[::rfq/query-success k params data]` | `{:event-id :k :params :data}` |
-| `[::rfq/query-failure k params error]` | `{:event-id :k :params :error}` |
-| `[::rfq/infinite-page-success k params mode page-data]` | `{:event-id :k :params :mode :data}` (`:mode` is `nil` \| `:append` \| `:prepend`) |
-| `[::rfq/infinite-page-failure k params error]` | `{:event-id :k :params :error}` |
+| `[::rfq/query-success k params data]` | `{:event-id :k :params :data :request-control}` |
+| `[::rfq/query-failure k params error]` | `{:event-id :k :params :error :request-control}` |
+| `[::rfq/infinite-page-success k params mode page-data]` | `{:event-id :k :params :mode :data :request-control}` (`:mode` is `nil` \| `:append` \| `:prepend`) |
+| `[::rfq/infinite-page-failure k params error]` | `{:event-id :k :params :error :request-control}` |
 | anything else | `nil` |
+
+`:request-control` — `{:query-id :request-id :issued-at}` — is only present when the source event carries the per-attempt stamp (i.e. it went through the library's effect wiring rather than a hand-dispatched or adapter-rebuilt event vector).

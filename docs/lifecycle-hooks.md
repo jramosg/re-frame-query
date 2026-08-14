@@ -105,55 +105,82 @@ Use lifecycle hooks + `set-query-data` to build optimistic updates in pure re-fr
 
 The checkbox toggles instantly. If the server rejects, the snapshot is restored. No library magic — just re-frame events and data.
 
-> **Race condition note:** If a query has active polling or an in-flight refetch, the refetch response could briefly overwrite your optimistic data before the mutation completes. In practice this race is rare and self-correcting — the mutation's `:invalidates` triggers a fresh refetch with correct server data immediately after success. If you need to guard against it, see the cancellation recipe below.
+> **Race condition note:** If a query has active polling or an in-flight refetch, the refetch response could briefly overwrite your optimistic data before the mutation completes. In practice this race is rare and self-correcting — the mutation's `:invalidates` triggers a fresh refetch with correct server data immediately after success. If you need to guard against it, dispatch [`::rfq/cancel-query`](#advanced-cancelling-in-flight-requests) alongside `set-query-data` — see below.
 
 ## Advanced: Cancelling In-Flight Requests
 
-TanStack Query solves the optimistic update race with `cancelQueries`, which aborts in-flight HTTP requests via `AbortController`. Since re-frame-query is transport-agnostic, cancellation lives in your transport layer — not in the library. Here's the pattern:
+- **`rfq/cancel-query`** — a built-in, state-layer cancel. It supersedes whatever request is in flight for a query so its response is dropped the moment it lands, without touching your transport. Zero setup, works with any effect adapter.
+- **Aborting the network request itself** — actually stopping the HTTP call (or websocket, etc.) so it doesn't run to completion. Since re-frame-query is transport-agnostic, this still lives in your transport layer, not in the library. Only worth the extra plumbing if the wasted request itself is a problem (bandwidth, server load), not just its effect on `app-db`.
+
+### Built-in: `rfq/cancel-query`
+
+Every fetch is stamped with a fresh `:request-id` when it starts. Calling `rfq/cancel-query` claims a new `:request-id` without issuing a request, so whatever response is still in flight no longer matches and is dropped on arrival — `:fetching?` clears immediately, and `:data`/`:status`/`:error` are left exactly as they are.
+
+Dispatch it in the same `on-start` hook that patches the optimistic update:
+
+```clojure
+(rf/reg-event-fx :todos/optimistic-toggle
+  (fn [{:keys [db]} [_ {:keys [id done]}]]
+    (let [qid [:todos/list {}]
+          old (get-in db [:re-frame.query/queries qid :data])
+          new (mapv #(if (= (:id %) id) (assoc % :done done) %) old)]
+      {:db (assoc-in db [:snapshots qid] old)
+       :dispatch-n [[::rfq/cancel-query :todos/list {}]        ;; drop any in-flight response
+                    [::rfq/set-query-data :todos/list {} new]]}))) ;; patch cache
+```
+
+Or call `re-frame.query.db/cancel-query` directly if you're already inside a `db -> db` handler and want to avoid the extra dispatch cycle. `rfq/cancel-query` is also useful on its own, with no cache write — e.g. abandoning a slow infinite re-fetch, or leaving a route for which a query is already in flight.
+
+### Also aborting the network request
+
+Plain `rfq/cancel-query` does **not** abort the network call — the request keeps running to completion, its response is just dropped at the state layer. If the wasted request itself is a problem (bandwidth, server load), also abort it in your transport layer. You no longer need to hand-roll an `:abort-key` through `query-fn` — `rfq/request-control` gives you the same `:query-id` re-frame-query itself uses, read straight off `on-success`:
 
 ```clojure
 ;; 1. Store AbortControllers per query in your transport layer
 (defonce abort-controllers (atom {}))
 
 (rf/reg-fx :http-xhrio
-  (fn [{:keys [method url body on-success on-failure abort-key]}]
-    (let [controller (js/AbortController.)
-          signal     (.-signal controller)]
-      (when abort-key
-        (swap! abort-controllers assoc abort-key controller))
+  (fn [{:keys [method url body on-success on-failure]}]
+    (let [{:keys [query-id]} (rfq/request-control on-success)
+          controller         (js/AbortController.)
+          signal              (.-signal controller)]
+      (when query-id
+        (when-let [old (get @abort-controllers query-id)]
+          (.abort old))                                    ;; a newer attempt supersedes the old one
+        (swap! abort-controllers assoc query-id controller))
       (-> (js/fetch url (clj->js {:method  (name method)
-                                   :headers {"Content-Type" "application/json"}
-                                   :signal  signal
-                                   :body    (some-> body clj->js js/JSON.stringify)}))
+                                  :headers {"Content-Type" "application/json"}
+                                  :signal  signal
+                                  :body    (some-> body clj->js js/JSON.stringify)}))
           (.then  #(when (.-ok %) ...dispatch on-success...))
           (.catch #(when-not (.-aborted signal)  ;; silently drop aborted requests
                     ...dispatch on-failure...))))))
 
-;; 2. Register an effect that aborts a request by key
+;; 2. Register an effect that aborts a request by key on demand
 (rf/reg-fx :abort-request
-  (fn [abort-key]
-    (when-let [controller (get @abort-controllers abort-key)]
+  (fn [query-id]
+    (when-let [controller (get @abort-controllers query-id)]
       (.abort controller)
-      (swap! abort-controllers dissoc abort-key))))
+      (swap! abort-controllers dissoc query-id))))
 
-;; 3. Tag queries with an abort-key so they can be cancelled
-(rfq/reg-query :todos/list
-  {:query-fn (fn [_] {:method :get :url "/api/todos"
-                       :abort-key [:todos/list {}]})
-   :tags     (constantly [[:todos]])})
-
-;; 4. In your on-start hook, abort the in-flight refetch before patching
+;; 3. In your on-start hook, abort the in-flight refetch's network call
+;;    *and* drop it at the state layer, then patch the cache
 (rf/reg-event-fx :todos/optimistic-toggle
   (fn [{:keys [db]} [_ {:keys [id done]}]]
     (let [qid [:todos/list {}]
           old (get-in db [:re-frame.query/queries qid :data])
           new (mapv #(if (= (:id %) id) (assoc % :done done) %) old)]
       {:db            (assoc-in db [:snapshots qid] old)
-       :abort-request qid                                  ;; cancel in-flight refetch
-       :dispatch      [::rfq/set-query-data :todos/list {} new]})))
+       :abort-request qid                                       ;; stop the network call
+       :dispatch-n    [[::rfq/cancel-query :todos/list {}]      ;; clear :fetching?, drop the response
+                        [::rfq/set-query-data :todos/list {} new]]}))) ;; patch cache
 ```
 
-The aborted fetch silently drops (no `on-failure` dispatch), the optimistic data stays intact, and the mutation's `:invalidates` triggers a correct refetch when the server responds.
+`qid` here is exactly `(util/query-id :todos/list {})` — the same value `rfq/request-control` reports as `:query-id` in step 1 — so the key you dispatch `:abort-request` with always matches what the adapter has stored, with no separate `:abort-key` to keep in sync.
+
+The `:http-xhrio` adapter's own `(.abort old)` in step 1 also aborts an older attempt automatically the instant a newer one for the same `k`/`params` starts firing (e.g. an overlapping refetch), so step 2/3's explicit `:abort-request` is only needed for cancelling *before* a replacement request exists — like the optimistic-update case above.
+
+Aborting the network call alone leaves `:fetching?` stuck `true` forever, since an aborted request fires neither `on-success` nor `on-failure` — that's why step 3 dispatches `::rfq/cancel-query` alongside `:abort-request` rather than relying on either alone.
 
 ## Observing Query Lifecycle
 

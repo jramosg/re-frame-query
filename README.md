@@ -6,19 +6,20 @@ Declarative data fetching and caching for [re-frame](https://github.com/day8/re-
 
 ## Features
 
-- **Declarative queries & mutations** — describe *what* to fetch, the library handles *when* and *how*
-- **Automatic callback wiring** — no manual `:on-success` / `:on-failure` plumbing
+- **Declarative queries & mutations**: describe *what* to fetch, the library handles *when* and *how*
+- **Automatic callback wiring**: no manual `:on-success` / `:on-failure` plumbing
 - **Tag-based cache invalidation** with automatic refetching of active queries
-- **Per-query garbage collection** — inactive queries are cleaned up after `cache-time-ms` via per-query timers (same model as TanStack Query)
-- **Polling** — automatic refetch intervals with per-subscriber or per-query config; multiple subscribers use the lowest non-zero interval
-- **Conditional fetching** — skip queries with `:skip? true` until a condition is met (e.g., dependent queries)
-- **Prefetching** — pre-populate the cache before a component subscribes (on hover, route transition, etc.)
-- **Smart status tracking** — distinguishes initial loading from background refetching
-- **Transport-agnostic** — works with any re-frame effect (HTTP, GraphQL, WebSocket, etc.)
-- **All state in re-frame DB** — predictable, inspectable, time-travel debuggable
-- **Infinite queries** — cursor-based pagination with automatic sequential re-fetch on invalidation, sliding window support
-- **Mutation lifecycle hooks** — `:on-start`, `:on-success`, `:on-failure` for optimistic updates and rollback
-- **Subscription-driven** — subscribing is all you need; fetching, caching, and cleanup are automatic
+- **Per-query garbage collection**: inactive queries are cleaned up after `cache-time-ms` via per-query timers (same model as TanStack Query)
+- **Polling**: automatic refetch intervals with per-subscriber or per-query config; multiple subscribers use the lowest non-zero interval
+- **Conditional fetching**: skip queries with `:skip? true` until a condition is met (e.g., dependent queries)
+- **Prefetching**: pre-populate the cache before a component subscribes (on hover, route transition, etc.)
+- **Smart status tracking**: distinguishes initial loading from background refetching
+- **Request race protection**: each fetch attempt is stamped with a `:request-id`; responses from superseded (stale) attempts are dropped automatically, plus `rfq/cancel-query` for explicit cancellation
+- **Transport-agnostic**: works with any re-frame effect (HTTP, GraphQL, WebSocket, etc.)
+- **All state in re-frame DB**: predictable, inspectable, time-travel debuggable
+- **Infinite queries**: cursor-based pagination with automatic sequential re-fetch on invalidation, sliding window support
+- **Mutation lifecycle hooks**: `:on-start`, `:on-success`, `:on-failure` for optimistic updates and rollback
+- **Subscription-driven**: subscribing is all you need; fetching, caching, and cleanup are automatic
 
 ## Quick Start
 

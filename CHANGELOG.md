@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Each new issued query attempt has an associated `:request-id` to prevent stale, in-flight query attempts from overwriting fresh data. Enabled for both normal & infinite queries. A refetch chain of sequential pages of an infinite query share the same `:request-id`.
+- Query cancelation:
+  - `::rfq/cancel-query` re-frame event. Useful for cancelling in-flight queries. Use-cases: Abandoning a slow query, leaving a page for which a query is already in-flight.
+  - `re-frame.query.db/cancel-query` is a pure function that can be used directly in your re-frame handlers to avoid another cycle loop.
+- Request attempt metadata: When a new query attempt fires, it will add request control metadata to the lifecycle events. Keys:
+  - `:issued-at`: monotonic time, defaults to `js/Date.now` where `js/performance` not supported
+  - `:request-id`: Current request *attempt* id
+  - `:query-id`: id of the query - formed from the query id + params used
+  ```clojure
+  ^{:re-frame.query/request-control {:query-id [:patients/page {:page 1}]
+                                     :request-id #uuid "…"
+                                     :issued-at 8412.3}}
+  [:re-frame.query/query-success :patients/page {:page 1}]
+  ```
+  - `rfq/request-control` is a small util to extract the request-control meta from events
+
+### Changed
+- `parse-result-event` now also returns `:request-control`: `{:query-id ... :request-id ... :issued-at ...}` with the metadata of the source event
+
 ## [0.11.0] - 2026-07-31
 
 ### Added

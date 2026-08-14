@@ -17,6 +17,10 @@
                         (see `set-default-effect-fn!`), the library auto-injects
                         success/failure callbacks. Without effect-fn, must return a
                         full re-frame effects map with manual callbacks (legacy).
+    :effect-fn          (fn [request on-success on-failure] -> effects-map) — optional
+                        per-query override of the global adapter. Append results to the
+                        callbacks with `conj`/`into` — rebuilding them strips the
+                        metadata that drops superseded responses.
     :cache-time-ms      — ms before an inactive query is garbage-collected (default: 300000 / 5 min)
     :stale-time-ms      — ms before a query is considered stale
     :tags               (fn [params] -> [[tag-tuple] ...]) — for invalidation matching
@@ -83,6 +87,14 @@
                      should be `conj`'d onto it)
 
   Must return a re-frame effects map.
+
+  **The callbacks carry metadata.** re-frame-query stamps each one with the
+  identity of the attempt that issued it and uses that stamp to drop responses
+  belonging to a superseded request. Append the result with `conj` or `into`,
+  which preserve metadata; rebuilding the vector (`(vec (concat ...))`,
+  `[(first on-success) ... data]`) silently strips the stamp and disables the
+  protection, so stale responses start overwriting fresh ones again. See
+  `re-frame.query/request-control`.
 
   Example for an `:http` effect:
 

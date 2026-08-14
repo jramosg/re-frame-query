@@ -20,10 +20,60 @@
   #?(:clj (System/currentTimeMillis)
      :cljs (.now js/Date)))
 
+(defn mono-now
+  "Monotonic elapsed-time reading in fractional milliseconds.
+   Diagnostics only (latency, watchdogs, inspector) — never an identity."
+  []
+  #?(:clj (/ (System/nanoTime) 1e6)
+     :cljs (if (exists? js/performance) (.now js/performance) (.now js/Date))))
+
 (defn query-id
   "Creates a canonical cache key from a query/mutation name and params."
   [k params]
   [k (or params {})])
+
+(defn gen-request-id
+  "Generate a UUID to be used as a request attempt id."
+  []
+  ; java.util.UUID rather than raising the minimum version for consumers.
+  #?(:clj (java.util.UUID/randomUUID)
+     :cljs (random-uuid)))
+
+(def request-control-key
+  "Metadata key under which the per-attempt request-control map travels on a
+   result callback event vector. Metadata — not a positional element — so the
+   event shape and the 3-arg effect-fn arity stay unchanged."
+  :re-frame.query/request-control)
+
+(defn with-request-control
+  "Returns `event` with `control` attached as `request-control-key` metadata.
+   The positional event vector is untouched, so adapters that append results
+   with `conj`/`into` carry the stamp through for free."
+  [event control]
+  (vary-meta event assoc request-control-key control))
+
+(defn request-control
+  "Returns the request-control map carried by `event`, or nil when the event
+   has none (a hand-dispatched event, or an adapter that rebuilt the vector)."
+  [event]
+  (get (meta event) request-control-key))
+
+(defn current-attempt?
+  "Determines if a result stamped with `req-id` still belongs to the attempt
+   `query` is waiting for — i.e. whether it should be committed.
+
+   Request ids are opaque unique values (UUIDs) supplied by the
+   `:re-frame.query/request-id` coeffect, so an id is never reused.
+
+   Fails OPEN: a nil `req-id` (no request-control metadata on the event) is
+   always accepted, so a custom effect adapter that drops the metadata keeps
+   working instead of silently swallowing every result.
+
+   A non-nil `req-id` against a nil `query` returns false — the entry was
+   evicted or wiped, and a late response must not resurrect it."
+  [query req-id]
+  (or (nil? req-id)
+      (= req-id (:request-id query))))
 
 (defn stale?
   "Determines if a query entry needs refetching.
@@ -83,9 +133,13 @@
      [:re-frame.query/infinite-page-failure k params error]
        => {:event-id ... :k ... :params ... :error error}
 
+   Also adds `:request-control` — `{:query-id ... :request-id ... :issued-at ...}`
+   — when the event carries it, so callers never reach into raw metadata.
+
    Returns nil for any other event vector — callers can branch on truthiness."
   [event]
   (let [[event-id k params a b] event
+        control (request-control event)
         rfq-result-event? (#{:re-frame.query/query-success
                              :re-frame.query/query-failure
                              :re-frame.query/infinite-page-success
@@ -93,6 +147,9 @@
                            event-id)]
     (when rfq-result-event?
       (cond-> {:event-id event-id :k k :params params}
+        (some? control)
+        (assoc :request-control control)
+
         (= event-id :re-frame.query/query-success)
         (assoc :data a)
 

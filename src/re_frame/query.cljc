@@ -48,6 +48,10 @@
 
   Must return a re-frame effects map.
 
+  Append the result to a callback with `conj` or `into`: the callbacks carry
+  metadata re-frame-query uses to drop responses from superseded requests, and
+  rebuilding the vector silently strips it — see `rfq/request-control`.
+
   Example:
     (rfq/set-default-effect-fn!
       (fn [request on-success on-failure]
@@ -212,6 +216,35 @@
   (rf/dispatch [:re-frame.query/set-query-data k params data]))
 
 ;; ---------------------------------------------------------------------------
+;; Cancellation
+;; ---------------------------------------------------------------------------
+
+(defn cancel-query
+  "Supersede every request in flight for a query, without starting a new one.
+
+  Dispatches `::rfq/cancel-query`, which stamps the entry with a fresh internal
+  `:request-id` and clears `:fetching?`, `:fetching-next?`, `:fetching-prev?`
+  and `:refetch-state`. Responses from the superseded requests are dropped
+  on arrival — `:data`, `:status` and `:error` are left as they are. No-op
+  when the query is not cached.
+
+  Use it when you write the cache yourself and do not want an older fetch to
+  win the race:
+
+    ;; Optimistic update — a fetch started before this patch would otherwise
+    ;; land afterwards and overwrite it with pre-mutation data.
+    (rfq/cancel-query :todos/list {:user-id 42})
+    (rfq/set-query-data :todos/list {:user-id 42} patched)
+
+  Note `rfq/set-query-data` does **not** supersede anything on its own — it
+  deliberately leaves an in-flight request alone rather than lying about it
+  — so the pairing above is required for optimistic updates. `cancel-query`
+  is also useful on its own, without writing data (e.g. leaving a route, or
+  abandoning a slow infinite re-fetch)."
+  [k params]
+  (rf/dispatch [:re-frame.query/cancel-query k params]))
+
+;; ---------------------------------------------------------------------------
 ;; Infinite Query API
 ;; ---------------------------------------------------------------------------
 
@@ -297,10 +330,11 @@
   "Parse one of the four rfq query result events into a map, hiding the
   positional event-vector shape from interceptors and telemetry code.
 
-  Returns `{:event-id :k :params <:data or :error> [:mode]}` or `nil` for
-  unrecognized events. The event kind is identified by `:event-id`; `:mode`
-  is only present for infinite-page-success events (`nil`, `:append`, or
-  `:prepend`).
+  Returns `{:event-id :k :params <:data or :error> [:mode] [:request-control]}`
+  or `nil` for unrecognized events. The event kind is identified by `:event-id`;
+  `:mode` is only present for infinite-page-success events (`nil`, `:append`, or
+  `:prepend`), and `:request-control` only when the event carries the
+  per-attempt stamp (see `rfq/request-control`).
 
   Example — route-scoped telemetry interceptor:
 
@@ -319,6 +353,43 @@
                                            event-id (or data error)]])
             context))))"
   util/parse-result-event)
+
+(def request-control
+  "Read the per-attempt request-control map off a callback event vector.
+
+  Returns `{:query-id [k params] :request-id <uuid> :issued-at <ms>}`, or `nil`
+  when the vector carries no stamp. `:request-id` is an opaque per-attempt id:
+  re-frame-query drops the results of any attempt whose id no longer matches the
+  cache entry, which is how an older overlapping refetch is kept from
+  overwriting a newer one.
+
+  Effect adapters use it to key transport-level state — e.g. an abort handle
+  per `:query-id`, aborted whenever a new `:request-id` shows up for the same
+  query:
+
+    (rfq/set-default-effect-fn!
+      (fn [request on-success on-failure]
+        (let [{:keys [query-id]} (rfq/request-control on-success)]
+          {:my-http (assoc request
+                           :abort-key   query-id
+                           ;; conj — see the warning below
+                           :on-success  on-success
+                           :on-failure  on-failure)})))
+
+  **The stamp travels as metadata on the event vector.** Append results with
+  `conj` or `into`, which preserve metadata:
+
+    (rf/dispatch (conj on-success data))          ;; correct
+
+  Never rebuild the vector — the stamp is silently lost and supersession stops
+  working, so stale responses start overwriting fresh ones again:
+
+    (rf/dispatch (vec (concat on-success [data]))) ;; WRONG — strips metadata
+    (rf/dispatch [(first on-success) ... data])    ;; WRONG — strips metadata
+
+  A result event with no stamp is still committed (fail open), so the failure
+  mode is a silent return of the stale-overwrite bug rather than a hang."
+  util/request-control)
 
 ;; ---------------------------------------------------------------------------
 ;; Debug Logging

@@ -53,6 +53,14 @@
       a mutation's `:invalidates` triggers a refetch or the next
       `ensure-query` resolves.
 
+  This function does **not** supersede an in-flight request: a fetch that
+  started earlier can still land afterwards and overwrite what you wrote
+  (e.g. a pre-mutation response clobbering an optimistic patch). Pair it
+  with `::rfq/cancel-query` (or `rfq/cancel-query`) when that matters:
+
+    (rfq/cancel-query :items/table {:page 1})
+    (rfq-db/set-query-data db :items/table {:page 1} patched)
+
   Example:
     (rfq-db/set-query-data db :items/table {:page 1} new-items)"
   [db k params data]
@@ -79,6 +87,44 @@
   (let [query (get-in db [:re-frame.query/queries qid])]
     (if (and query (not (:active? query)))
       (update db :re-frame.query/queries dissoc qid)
+      db)))
+
+(defn cancel-query
+  "Cancel any pending request attempts by setting `request-id` on the query data.
+  Works by setting a new request-id on the query data, which will trigger the
+  success/failure event to conclude the in-flight request is not the
+  current-attempt, dropping all the response data.
+
+  Params:
+  - `db`: re-frame db snapshot
+  - `k`: query registry id
+  - `params`: params used for the issued query
+  - `query-config`: config of the query. Gotten from query registry.
+  - `request-id`: the new request id to be set
+
+  N.B: The new request-id id must be different than the currently set one from
+  the query-data in `db` otherwise the query cannot be canceled."
+  [db k params query-config request-id]
+  (let [qid (util/query-id k params)
+        query-data (get-in db [:re-frame.query/queries qid])
+        infinite? (util/infinite-query? query-config)]
+    (when (and request-id
+               (= (:request-id query-data) request-id))
+      (throw (ex-info "Same request-id already exists for query. Cannot be used to cancel"
+                      {:request-id request-id
+                       :k k
+                       :params params})))
+    (if query-data
+      ;; Claims a fresh id without starting a request: the in-flight attempt no
+      ;; longer matches, so its response is dropped on arrival. No-op when the
+      ;; query is not cached — cancelling must not create an entry.
+      (update-in db [:re-frame.query/queries qid]
+                 util/merge-with-default
+                 (cond-> {:request-id request-id
+                          :fetching? false}
+                   infinite? (assoc :fetching-next? false
+                                    :fetching-prev? false
+                                    :refetch-state nil)))
       db)))
 
 (defn garbage-collect

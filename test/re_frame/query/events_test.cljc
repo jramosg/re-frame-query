@@ -482,6 +482,11 @@
       (is (nil? (get-in (h/app-db) [:re-frame.query/mutations mid]))
           "mutation state does not exist before any event is dispatched"))))
 
+;; NOTE: the :books/list blocks below share one qid ([:books/list {}]) and the db
+;; is not reset between them. :request-id is an opaque per-attempt value supplied
+;; by the :re-frame.query/request-id coeffect (a UUID), so the shape assertions
+;; dissoc it and pin it separately — the value itself carries no meaning, only
+;; whether an attempt was stamped and whether the stamp changed.
 (deftest query-state-shape-test
   (testing "Full state shape after ensure-query (initial load, no prior data)"
     (rfq/reg-query :books/list {:query-fn (fn [_] {})})
@@ -495,7 +500,9 @@
               :stale? false
               :active? false
               :tags #{}}
-             query))))
+             (dissoc query :request-id)))
+      (is (uuid? (:request-id query))
+          "issuing a request stamps the entry with the injected request id")))
 
   (testing "Full state shape after query-success"
     (rfq/reg-query :books/list
@@ -515,7 +522,9 @@
               :tags #{[:books :all]}
               :stale-time-ms 30000
               :cache-time-ms 300000}
-             (dissoc query :fetched-at)))
+             (dissoc query :fetched-at :request-id)))
+      (is (uuid? (:request-id query))
+          "committing a result issues nothing, so the previous block's stamp stays")
       (is (number? (:fetched-at query))
           "fetched-at is a numeric timestamp")))
 
@@ -542,7 +551,8 @@
     ;; Initial success
     (h/process-event [:re-frame.query/query-success :books/list {} [{:id 1}]])
     ;; Make stale: fetched-at=0, now-ms=1001 (past stale-time of 1000)
-    (let [qid (util/query-id :books/list {})]
+    (let [qid (util/query-id :books/list {})
+          id-before (get-in (h/app-db) [:re-frame.query/queries qid :request-id])]
       (swap! rf-db/app-db assoc-in [:re-frame.query/queries qid :fetched-at] 0)
       (with-redefs [util/now-ms (constantly 1001)]
         (h/process-event [:re-frame.query/ensure-query :books/list {}]))
@@ -556,8 +566,10 @@
                 :tags #{[:books :all]}
                 :stale-time-ms 1000
                 :cache-time-ms 300000}
-               (dissoc query :fetched-at))
-            "status stays :success, fetching? true, stale data preserved")))))
+               (dissoc query :fetched-at :request-id))
+            "status stays :success, fetching? true, stale data preserved")
+        (is (not= id-before (:request-id query))
+            "this ensure-query issued a new attempt, so the entry is restamped")))))
 
 (deftest mutation-state-shape-test
   (testing "Full state shape after execute-mutation"

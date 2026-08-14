@@ -1,7 +1,6 @@
 (ns re-frame.query.test-helpers
   "Shared test helpers, fixtures, and utilities for re-frame-query tests."
   (:require
-   [clojure.test :refer [use-fixtures]]
    [re-frame.core :as rf]
    [re-frame.db :as rf-db]
    [re-frame.query :as rfq]

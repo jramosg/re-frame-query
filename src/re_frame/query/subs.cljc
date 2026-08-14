@@ -40,23 +40,26 @@
          :fetching-prev? false))
 
 (defn- resolve-query
-  "Look up a query by qid, compute stale?, return idle-state if absent."
-  [queries qid]
-  (if-let [query (get queries qid)]
-    (let [now (util/now-ms)
-          stale (util/stale? query now)]
-      (assoc query :stale? stale))
-    idle-state))
-
-(defn- resolve-infinite-query
-  "Like resolve-query but strips internal :refetch-state."
+  "Look up a query by qid, compute stale?, strip the internal :request-id
+   (a bare refetch must not re-render subscribers), return idle-state if absent."
   [queries qid]
   (if-let [query (get queries qid)]
     (let [now (util/now-ms)
           stale (util/stale? query now)]
       (-> query
           (assoc :stale? stale)
-          (dissoc :refetch-state)))
+          (dissoc :request-id)))
+    idle-state))
+
+(defn- resolve-infinite-query
+  "Like resolve-query but also strips internal :refetch-state."
+  [queries qid]
+  (if-let [query (get queries qid)]
+    (let [now (util/now-ms)
+          stale (util/stale? query now)]
+      (-> query
+          (assoc :stale? stale)
+          (dissoc :request-id :refetch-state)))
     idle-infinite-state))
 
 ;; ---------------------------------------------------------------------------

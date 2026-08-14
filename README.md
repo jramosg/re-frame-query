@@ -146,6 +146,7 @@ On success, mutations automatically invalidate matching tags — all active quer
 | [Conditional Fetching](docs/conditional-fetching.md) | `:skip?` for dependent queries |
 | [Prefetching](docs/prefetching.md) | Pre-populate cache on hover or route transition |
 | [Placeholder Data](docs/placeholder-data.md) | Seed the cache from existing client data on route enter, with background refetch |
+| [Request Attempts](docs/request-attempts.md) | Protect the cache from late responses and logically cancel attempts |
 | [Where Data Lives](docs/app-db.md) | `app-db` layout, inspectability, serialization |
 | [Effect Overrides](docs/effect-overrides.md) | Per-query transport, custom callbacks |
 | [Lifecycle Hooks](docs/lifecycle-hooks.md) | Mutation hooks, optimistic updates, request cancellation, query observability via interceptors |

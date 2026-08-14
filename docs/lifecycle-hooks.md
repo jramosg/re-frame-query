@@ -135,6 +135,9 @@ Or call `re-frame.query.db/cancel-query` directly if you're already inside a `db
 
 Plain `rfq/cancel-query` does **not** abort the network call — the request keeps running to completion, its response is just dropped at the state layer. If the wasted request itself is a problem (bandwidth, server load), also abort it in your transport layer. You no longer need to hand-roll an `:abort-key` through `query-fn` — `rfq/request-control` gives you the same `:query-id` re-frame-query itself uses, read straight off `on-success`:
 
+When cancellation stops an in-flight initial request, the cache entry remains
+stale so a later `ensure-query` can retry it.
+
 ```clojure
 ;; 1. Store AbortControllers per query in your transport layer
 (defonce abort-controllers (atom {}))

@@ -24,6 +24,7 @@ Use these to add queries/mutations one at a time, either standalone or after `in
 | `rfq/reg-query` | Register a single query definition |
 | `rfq/reg-mutation` | Register a single mutation definition |
 | `rfq/prefetch` | `(rfq/prefetch k params)` — pre-populate cache (convenience for dispatching `::rfq/ensure-query`) |
+| `rfq/cancel-query` | `(rfq/cancel-query k params)` — logically cancel the current attempt and drop its later result |
 | `rfq/reset-api-state!` | Clear all query/mutation state and cancel all timers (for logout, account switch, etc.) |
 
 ### `reg-query` config keys
@@ -59,6 +60,7 @@ With `(:require [re-frame.query :as rfq])`, use `::rfq/` shorthand:
 |---|---|
 | `[::rfq/ensure-query k params]` | Fetch if stale/absent (called automatically by subscription; can also used for prefetching) |
 | `[::rfq/refetch-query k params]` | Force refetch regardless of staleness |
+| `[::rfq/cancel-query k params]` | Logically cancel the current attempt; later success/failure callbacks are ignored and an in-flight entry remains stale so it can retry |
 | `[::rfq/execute-mutation k params]` | Execute a mutation |
 | `[::rfq/execute-mutation k params opts]` | Execute with [lifecycle hooks](lifecycle-hooks.md) |
 | `[::rfq/set-query-data k params data]` | Directly set cached query data (for [placeholder data](placeholder-data.md), optimistic updates, rollback). Marks the entry stale — the next `ensure-query` background-refetches. |
@@ -112,6 +114,31 @@ With `(:require [re-frame.query :as rfq])`, use `::rfq/` shorthand:
  :stale-time-ms <ms>
  :cache-time-ms <ms>}
 ```
+
+## Query Request Attempts
+
+Each query attempt receives a fresh `:request-id`. The library attaches a
+request-control map to its success/failure callback event vectors:
+
+```clojure
+(rfq/request-control on-success)
+;; => {:query-id [:books/list {:page 1}]
+;;     :request-id <uuid>
+;;     :issued-at <monotonic-ms>}
+```
+
+Effect adapters must append response data with `conj` or `into`, which
+preserves the vector metadata. Rebuilding the callback with `vec` or a new
+literal loses the stamp and makes overlapping responses fail open. Queries
+that return a complete legacy effects map are stamped automatically when
+their transport maps contain conventional `:on-success` or `:on-failure`
+callbacks.
+
+`rfq/cancel-query` is logical cancellation: it supersedes the attempt and
+marks an in-flight entry stale, but it does not abort the transport. Physical
+abort remains transport-specific; use `rfq/request-control` to key an abort
+handle if the adapter supports it. Infinite-query refetch chains use one
+request id, so cancelling a chain drops all of its late pages.
 
 ## Event Introspection
 

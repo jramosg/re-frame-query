@@ -87,6 +87,22 @@ Polling can be started either via subscription opts or via `mark-active`:
 
 Polling skips a tick when a request is already in-flight (prevents stale-response races). Set `:polling-mode :force` on the query config to restore unconditional polling. Infinite queries do not support polling.
 
+## Request Attempts and Cancellation
+
+Every query attempt carries a fresh request id on its success/failure callback
+metadata. Effect adapters must append responses with `conj` or `into` so the
+metadata survives. Use `(rfq/request-control on-success)` to inspect the
+`:query-id` and `:request-id`, for example when keying a transport abort handle.
+
+```clojure
+(rf/dispatch [::rfq/cancel-query :todos/list {:user-id 42}])
+```
+
+`cancel-query` is logical cancellation: it drops late callbacks and leaves an
+in-flight entry stale so it can retry. It does not abort the transport.
+Queries using a complete legacy effects map are stamped automatically when
+their transport callback fields are named `:on-success` and `:on-failure`.
+
 ## Inline Cache Operations (`re-frame.query.db`)
 
 Use `rfq-db` to read/write the query cache inside your own event handlers without dispatching extra events:

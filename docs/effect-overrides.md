@@ -61,3 +61,7 @@ If your adapter needs the stamp directly — e.g. to key an abort handle by `:qu
                      :on-success on-success
                      :on-failure on-failure)})))
 ```
+
+Queries using a complete legacy effects map are also protected when their
+transport maps contain conventional `:on-success` and `:on-failure` callback
+fields. Mutation callbacks do not carry query-attempt metadata.

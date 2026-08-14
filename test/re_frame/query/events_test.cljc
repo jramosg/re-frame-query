@@ -538,6 +538,108 @@
                       (util/query-id :patients/page page-1)
                       :data]))))))
 
+(deftest query-attempt-failure-and-lifecycle-test
+  (testing "a late failure cannot replace a newer successful attempt"
+    (let [calls (atom [])
+          params {:page 1}]
+      (rf/reg-fx :test-http #(swap! calls conj %))
+      (rfq/set-default-effect-fn!
+       (fn [request on-success on-failure]
+         {:test-http (assoc request
+                            :on-success on-success
+                            :on-failure on-failure)}))
+      (rfq/reg-query :patients/page
+        {:query-fn (fn [_] {:url "/api/patients"})})
+      (h/process-event
+       [:re-frame.query/refetch-query :patients/page params])
+      (h/process-event
+       [:re-frame.query/refetch-query :patients/page params])
+      (let [[first-request second-request] @calls
+            qid (util/query-id :patients/page params)
+            request-id (get (meta (:on-success second-request))
+                            :re-frame.query/request-id)]
+        (is (uuid? request-id))
+        (is (= request-id
+               (get (meta (:on-failure second-request))
+                    :re-frame.query/request-id)))
+        (h/process-event
+         (conj (:on-success second-request) [{:id :new}]))
+        (h/process-event
+         (conj (:on-failure first-request) {:status 503}))
+        (let [query (get-in (h/app-db) [:re-frame.query/queries qid])]
+          (is (= [{:id :new}] (:data query)))
+          (is (= :success (:status query)))
+          (is (nil? (:error query)))
+          (is (false? (:fetching? query)))
+          (is (nil? (:re-frame.query/request-id query)))))))
+
+  (testing "a response after reset cannot recreate the query cache"
+    (let [calls (atom [])]
+      (rf/reg-fx :test-http #(swap! calls conj %))
+      (rfq/set-default-effect-fn!
+       (fn [request on-success on-failure]
+         {:test-http (assoc request
+                            :on-success on-success
+                            :on-failure on-failure)}))
+      (rfq/reg-query :patients/page
+        {:query-fn (fn [_] {:url "/api/patients"})})
+      (h/process-event
+       [:re-frame.query/ensure-query :patients/page {}])
+      (let [request (first @calls)]
+        (h/process-event [:re-frame.query/reset-api-state])
+        (h/process-event
+         (conj (:on-success request) [{:id :obsolete}]))
+        (is (nil? (:re-frame.query/queries (h/app-db)))))))
+
+  (testing "a response after query removal cannot recreate the cache entry"
+    (let [calls (atom [])]
+      (rf/reg-fx :test-http #(swap! calls conj %))
+      (rfq/set-default-effect-fn!
+       (fn [request on-success on-failure]
+         {:test-http (assoc request
+                            :on-success on-success
+                            :on-failure on-failure)}))
+      (rfq/reg-query :patients/page
+        {:query-fn (fn [_] {:url "/api/patients"})})
+      (h/process-event
+       [:re-frame.query/ensure-query :patients/page {}])
+      (let [request (first @calls)
+            qid (util/query-id :patients/page {})]
+        (h/process-event [:re-frame.query/remove-query qid])
+        (h/process-event
+         (conj (:on-success request) [{:id :obsolete}]))
+        (is (nil? (get-in (h/app-db)
+                          [:re-frame.query/queries qid])))))))
+
+(deftest forced-poll-attempt-test
+  (testing "a late forced-poll failure cannot replace newer data"
+    (let [calls (atom [])]
+      (rf/reg-fx :test-http #(swap! calls conj %))
+      (rfq/set-default-effect-fn!
+       (fn [request on-success on-failure]
+         {:test-http (assoc request
+                            :on-success on-success
+                            :on-failure on-failure)}))
+      (rfq/reg-query :patients/page
+        {:query-fn (fn [_] {:url "/api/patients"})
+         :polling-mode :force})
+      (h/process-event
+       [:re-frame.query/query-success :patients/page {} [{:id :old}]])
+      (h/process-event [:re-frame.query/poll-refetch :patients/page {}])
+      (h/process-event [:re-frame.query/poll-refetch :patients/page {}])
+      (let [[first-request second-request] @calls
+            qid (util/query-id :patients/page {})]
+        (h/process-event
+         (conj (:on-success second-request) [{:id :new}]))
+        (h/process-event
+         (conj (:on-failure first-request) {:status 503}))
+        (is (= [{:id :new}]
+               (get-in (h/app-db)
+                       [:re-frame.query/queries qid :data])))
+        (is (= :success
+               (get-in (h/app-db)
+                       [:re-frame.query/queries qid :status])))))))
+
 ;; ---------------------------------------------------------------------------
 ;; Registration error handling tests
 ;; ---------------------------------------------------------------------------

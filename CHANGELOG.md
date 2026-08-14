@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-14
+
 ### Added
 - Each new issued query attempt has an associated `:request-id` to prevent stale, in-flight query attempts from overwriting fresh data. Enabled for both normal & infinite queries. A refetch chain of sequential pages of an infinite query share the same `:request-id`.
 - Query cancelation:
@@ -183,7 +185,8 @@ Initial public release.
 - 80 unit tests (371 assertions), 60 Playwright e2e tests
 - GitHub Actions CI with parallel unit + e2e jobs
 
-[unreleased]: https://github.com/shipclojure/re-frame-query/compare/v0.11.0...HEAD
+[unreleased]: https://github.com/shipclojure/re-frame-query/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/shipclojure/re-frame-query/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/shipclojure/re-frame-query/compare/v0.10.0...v0.11.0
 [0.10.1]: https://github.com/shipclojure/re-frame-query/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/shipclojure/re-frame-query/compare/v0.9.0...v0.10.0

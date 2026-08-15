@@ -150,6 +150,7 @@
 (deftest subscription-polling-e2e-test
   (testing "Subscribing with :polling-interval-ms starts polling automatically"
     (rf-test/run-test-sync
+     (rfq/set-default-effect-fn! h/noop-effect-fn)
      (rfq/reg-query :books/list {:query-fn (fn [_] {})})
      (let [qid (util/query-id :books/list {})
            sub (rf/subscribe [:re-frame.query/query :books/list {} {:polling-interval-ms 5000}])]
@@ -162,6 +163,7 @@
 
   (testing "Query registered with :polling-interval-ms starts polling on subscribe"
     (rf-test/run-test-sync
+     (rfq/set-default-effect-fn! h/noop-effect-fn)
      (rfq/reg-query :books/list
        {:query-fn (fn [_] {})
         :polling-interval-ms 3000})
@@ -174,6 +176,7 @@
 
   (testing "Per-subscription interval overrides query-level default"
     (rf-test/run-test-sync
+     (rfq/set-default-effect-fn! h/noop-effect-fn)
      (rfq/reg-query :books/list
        {:query-fn (fn [_] {})
         :polling-interval-ms 5000})
@@ -185,6 +188,7 @@
 
   (testing "Subscribing without :polling-interval-ms does not start polling"
     (rf-test/run-test-sync
+     (rfq/set-default-effect-fn! h/noop-effect-fn)
      (rfq/reg-query :books/no-poll {:query-fn (fn [_] {})})
      (let [qid (util/query-id :books/no-poll {})
            sub (rf/subscribe [:re-frame.query/query :books/no-poll {}])]
@@ -196,6 +200,7 @@
    (deftest subscription-dispose-stops-polling
      (testing "Disposing the subscription stops polling"
        (rf-test/run-test-sync
+        (rfq/set-default-effect-fn! h/noop-effect-fn)
         (rfq/reg-query :books/list {:query-fn (fn [_] {})})
         (let [qid (util/query-id :books/list {})
               sub (rf/subscribe [:re-frame.query/query :books/list {} {:polling-interval-ms 5000}])]
@@ -211,6 +216,7 @@
    (deftest subscription-dispose-with-query-level-polling-stops
      (testing "Disposing a subscription with query-level polling stops it"
        (rf-test/run-test-sync
+        (rfq/set-default-effect-fn! h/noop-effect-fn)
         (rfq/reg-query :books/list
           {:query-fn (fn [_] {})
            :polling-interval-ms 3000})
@@ -226,6 +232,7 @@
    (deftest polling-after-skip-toggle-test
      (testing "polling starts when re-subscribing without skip?"
        (rf-test/run-test-sync
+        (rfq/set-default-effect-fn! h/noop-effect-fn)
         (rfq/reg-query :books/list {:query-fn (fn [_] {})})
         (let [qid (util/query-id :books/list {})]
           ;; Subscribe with skip — no polling

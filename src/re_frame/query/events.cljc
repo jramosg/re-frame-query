@@ -34,6 +34,19 @@
    :request-id req-id
    :issued-at (util/mono-now)})
 
+(defn- resolve-effect-fn
+  "The effect adapter for `config` — its own `:effect-fn` or the global
+   default. Throws when neither is configured: running without an adapter
+   is an unconfigured-library state, not a supported mode."
+  [config k]
+  (or (:effect-fn config)
+      (registry/get-default-effect-fn)
+      (throw (ex-info (str "re-frame-query: no effect adapter configured for " k
+                           " — set a global adapter with `rfq/set-default-effect-fn!`"
+                           " (or `:default-effect-fn` in `rfq/init!`),"
+                           " or provide a per-query `:effect-fn`.")
+                      {:key k}))))
+
 (defn- start-query-attempt
   "Write `query-state` plus the new `:request-id` onto the entry for `k`/`params`,
    creating it with defaults if absent. Any attempt still in flight is thereby
@@ -58,15 +71,12 @@
 
 (defn- build-query-effects [query-config k params req-id]
   (let [query-fn (:query-fn query-config)
-        effect-fn (or (:effect-fn query-config)
-                      (registry/get-default-effect-fn))
+        effect-fn (resolve-effect-fn query-config k)
         request (query-fn params)
         control (make-request-control k params req-id)]
-    (if effect-fn
-      (effect-fn request
-                 (util/with-request-control [:re-frame.query/query-success k params] control)
-                 (util/with-request-control [:re-frame.query/query-failure k params] control))
-      request)))
+    (effect-fn request
+               (util/with-request-control [:re-frame.query/query-success k params] control)
+               (util/with-request-control [:re-frame.query/query-failure k params] control))))
 
 (rf/reg-event-fx
   :re-frame.query/ensure-query
@@ -195,17 +205,13 @@
   (fn [{:keys [db]} [_ k params opts]]
     (let [mutation-config (registry/get-mutation! k)
           mutation-fn (:mutation-fn mutation-config)
-          effect-fn (or (:effect-fn mutation-config)
-                        (registry/get-default-effect-fn))
+          effect-fn (resolve-effect-fn mutation-config k)
           mid (util/query-id k params)
           request (mutation-fn params)
           hooks (select-keys opts [:on-success :on-failure])
-          effects (if effect-fn
-                    (effect-fn request
-                               [:re-frame.query/mutation-success k params hooks]
-                               [:re-frame.query/mutation-failure k params hooks])
-                           ;; mutation-fn returns a full effects map
-                    request)
+          effects (effect-fn request
+                             [:re-frame.query/mutation-success k params hooks]
+                             [:re-frame.query/mutation-failure k params hooks])
           start-fx (dispatch-hooks (:on-start opts) params)]
       (-> (merge
            {:db (assoc-in db [:re-frame.query/mutations mid]
@@ -331,16 +337,13 @@
    one logical attempt."
   [query-config k params cursor on-success-event req-id]
   (let [query-fn (:query-fn query-config)
-        effect-fn (or (:effect-fn query-config)
-                      (registry/get-default-effect-fn))
+        effect-fn (resolve-effect-fn query-config k)
         request (query-fn (assoc params :cursor cursor))
         control (make-request-control k params req-id)]
-    (if effect-fn
-      (effect-fn request
-                 (util/with-request-control on-success-event control)
-                 (util/with-request-control
-                   [:re-frame.query/infinite-page-failure k params] control))
-      request)))
+    (effect-fn request
+               (util/with-request-control on-success-event control)
+               (util/with-request-control
+                 [:re-frame.query/infinite-page-failure k params] control))))
 
 (defn- apply-max-pages
   "Trim pages/page-params to max-pages (sliding window).

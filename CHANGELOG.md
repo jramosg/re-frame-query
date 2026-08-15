@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Breaking:** executing a query or mutation with no effect adapter (per-query/mutation `:effect-fn` or global default) now throws instead of passing the raw effects map through. The undocumented legacy form — `query-fn` returning a full effects map with hand-written callbacks — is removed; it let stale responses overwrite fresh data ([#6](https://github.com/shipclojure/re-frame-query/issues/6)).
+
 ## [0.12.0] - 2026-08-14
 
 ### Added

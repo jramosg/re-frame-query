@@ -34,6 +34,7 @@
 ;; ---------------------------------------------------------------------------
 
 (deftest ensure-query-test
+  (rfq/set-default-effect-fn! h/noop-effect-fn)
   (testing "sets status to :loading when no data exists"
     (rfq/reg-query :books/list
       {:query-fn (fn [_] {})})
@@ -92,6 +93,7 @@
         (is (true? (:fetching? query)))))))
 
 (deftest refetch-query-test
+  (rfq/set-default-effect-fn! h/noop-effect-fn)
   (testing "keeps :success status when data exists"
     (rfq/reg-query :books/list
       {:query-fn (fn [_] {})})
@@ -261,31 +263,6 @@
               :on-success [:re-frame.query/query-success :books/special {}]
               :on-failure [:re-frame.query/query-failure :books/special {}]}
              @captured)))))
-
-(deftest effect-fn-fallback-test
-  (testing "without effect-fn, query-fn returning a full effects map still works"
-    (let [captured (atom nil)]
-      (rf/reg-fx :test-http (fn [v] (reset! captured v)))
-      ;; No set-default-effect-fn! call — legacy mode
-      (rfq/reg-query :books/legacy
-        {:query-fn (fn [{:keys [page]}]
-                     {:test-http {:method :get
-                                  :url "/api/books"
-                                  :on-success [:re-frame.query/query-success :books/legacy {:page page}]
-                                  :on-failure [:re-frame.query/query-failure :books/legacy {:page page}]}})})
-      (h/process-event [:re-frame.query/refetch-query :books/legacy {:page 1}])
-      (is (= {:method :get
-              :url "/api/books"
-              :on-success [:re-frame.query/query-success :books/legacy {:page 1}]
-              :on-failure [:re-frame.query/query-failure :books/legacy {:page 1}]}
-             @captured))))
-
-  (testing "queries without custom effect-fn work normally"
-    (rfq/reg-query :books/plain {:query-fn (fn [_] {})})
-    (h/process-event [:re-frame.query/query-success :books/plain {} [{:id 1}]])
-    (let [qid (util/query-id :books/plain {})]
-      (is (= :success (get-in (h/app-db) [:re-frame.query/queries qid :status])))
-      (is (= [{:id 1}] (get-in (h/app-db) [:re-frame.query/queries qid :data]))))))
 
 ;; ---------------------------------------------------------------------------
 ;; init! (declarative registry) tests
@@ -465,6 +442,53 @@
          #"infinite query.*ensure-infinite-query"
          (h/process-event [:re-frame.query/ensure-query :feed/items {}])))))
 
+;; The fixture calls h/reset-db! → rfq/clear-registry!, which also clears the
+;; global default effect-fn — so "no adapter anywhere" is the starting state.
+(deftest no-effect-adapter-throws-test
+  (testing "ensure-query throws when neither :effect-fn nor a global default exists"
+    (rfq/reg-query :books/list
+      {:query-fn (fn [_] {:method :get :url "/api/books"})})
+    (is (thrown-with-msg?
+         #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+         #"no effect adapter configured for :books/list"
+         (h/process-event [:re-frame.query/ensure-query :books/list {}]))))
+
+  (testing "refetch-query throws too, and ex-data carries the key"
+    (rfq/reg-query :books/list
+      {:query-fn (fn [_] {:method :get :url "/api/books"})})
+    (let [error (try (h/process-event [:re-frame.query/refetch-query :books/list {}])
+                     nil
+                     (catch #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo) e e))]
+      (is (some? error) "refetching without an adapter throws")
+      (is (= {:key :books/list} (ex-data error)))))
+
+  (testing "execute-mutation throws when no adapter is resolvable"
+    (rfq/reg-mutation :books/create
+      {:mutation-fn (fn [_] {:method :post :url "/api/books"})})
+    (is (thrown-with-msg?
+         #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+         #"no effect adapter configured for :books/create"
+         (h/process-event [:re-frame.query/execute-mutation :books/create {}]))))
+
+  (testing "ensure-infinite-query throws when no adapter is resolvable"
+    (rfq/reg-query :feed/items
+      {:query-fn (fn [_] {:method :get :url "/api/feed"})
+       :infinite {:initial-cursor nil
+                  :get-next-cursor (fn [resp] (:next_cursor resp))}})
+    (is (thrown-with-msg?
+         #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+         #"no effect adapter configured for :feed/items"
+         (h/process-event [:re-frame.query/ensure-infinite-query :feed/items {}]))))
+
+  (testing "a per-query :effect-fn resolves without a global default"
+    (rfq/reg-query :books/detail
+      {:query-fn (fn [_] {:method :get :url "/api/books/1"})
+       :effect-fn h/noop-effect-fn})
+    (h/process-event [:re-frame.query/ensure-query :books/detail {}])
+    (let [qid (util/query-id :books/detail {})]
+      (is (true? (:fetching? (get-in (h/app-db) [:re-frame.query/queries qid])))
+          "the query starts normally through its own adapter"))))
+
 ;; ---------------------------------------------------------------------------
 ;; Query state shape completeness tests
 ;; ---------------------------------------------------------------------------
@@ -488,6 +512,7 @@
 ;; dissoc it and pin it separately — the value itself carries no meaning, only
 ;; whether an attempt was stamped and whether the stamp changed.
 (deftest query-state-shape-test
+  (rfq/set-default-effect-fn! h/noop-effect-fn)
   (testing "Full state shape after ensure-query (initial load, no prior data)"
     (rfq/reg-query :books/list {:query-fn (fn [_] {})})
     (h/process-event [:re-frame.query/ensure-query :books/list {}])
@@ -572,6 +597,7 @@
             "this ensure-query issued a new attempt, so the entry is restamped")))))
 
 (deftest mutation-state-shape-test
+  (rfq/set-default-effect-fn! h/noop-effect-fn)
   (testing "Full state shape after execute-mutation"
     (rfq/reg-mutation :books/create {:mutation-fn (fn [_] {})})
     (h/process-event [:re-frame.query/execute-mutation :books/create {:title "Dune"}])
@@ -1115,6 +1141,7 @@
 
 (deftest reset-api-state-then-queries-work-test
   (testing "After reset, new queries work normally"
+    (rfq/set-default-effect-fn! h/noop-effect-fn)
     (rfq/reg-query :books/list {:query-fn (fn [_] {})})
     ;; Populate, then reset
     (h/process-event [:re-frame.query/query-success :books/list {} [{:id 1}]])

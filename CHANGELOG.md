@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Cancelling an in-flight initial query now leaves its cache entry stale so a
+  later `ensure-query` can retry it.
+
 ## [0.12.0] - 2026-08-14
 
 ### Added

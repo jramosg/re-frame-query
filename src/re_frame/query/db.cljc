@@ -107,6 +107,9 @@
   [db k params query-config request-id]
   (let [qid (util/query-id k params)
         query-data (get-in db [:re-frame.query/queries qid])
+        in-flight? (or (:fetching? query-data)
+                       (:fetching-next? query-data)
+                       (:fetching-prev? query-data))
         infinite? (util/infinite-query? query-config)]
     (when (and request-id
                (= (:request-id query-data) request-id))
@@ -122,6 +125,7 @@
                  util/merge-with-default
                  (cond-> {:request-id request-id
                           :fetching? false}
+                   in-flight? (assoc :stale? true)
                    infinite? (assoc :fetching-next? false
                                     :fetching-prev? false
                                     :refetch-state nil)))

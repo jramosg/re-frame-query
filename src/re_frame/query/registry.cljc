@@ -13,10 +13,12 @@
   `k`      - Namespaced keyword identifying the query (e.g. :todos/list)
   `config` - Map with keys:
     :query-fn           (fn [params] -> request-map) — REQUIRED
-                        Returns a request description. When an effect-fn is configured
-                        (see `set-default-effect-fn!`), the library auto-injects
-                        success/failure callbacks. Without effect-fn, must return a
-                        full re-frame effects map with manual callbacks (legacy).
+                        Returns a request description. An effect adapter is REQUIRED
+                        to turn it into effects: either the global one (set with
+                        `set-default-effect-fn!` or `:default-effect-fn` in `init!`)
+                        or this query's `:effect-fn`. The adapter auto-injects
+                        success/failure callbacks; query execution throws if no
+                        adapter is configured.
     :effect-fn          (fn [request on-success on-failure] -> effects-map) — optional
                         per-query override of the global adapter. Append results to the
                         callbacks with `conj`/`into` — rebuilding them strips the
@@ -40,10 +42,12 @@
   `k`      - Namespaced keyword identifying the mutation (e.g. :todos/add)
   `config` - Map with keys:
     :mutation-fn        (fn [params] -> request-map) — REQUIRED
-                        Returns a request description. When an effect-fn is configured
-                        (see `set-default-effect-fn!`), the library auto-injects
-                        success/failure callbacks. Without effect-fn, must return a
-                        full re-frame effects map with manual callbacks (legacy).
+                        Returns a request description. An effect adapter is REQUIRED
+                        to turn it into effects: either the global one (set with
+                        `set-default-effect-fn!` or `:default-effect-fn` in `init!`)
+                        or this mutation's `:effect-fn`. The adapter auto-injects
+                        success/failure callbacks; mutation execution throws if no
+                        adapter is configured.
     :invalidates        (fn [params] -> [[tag-tuple] ...]) — tags to invalidate on success
     :transform-response (fn [data params] -> data') — optional, applied to raw success
                         data before storing.

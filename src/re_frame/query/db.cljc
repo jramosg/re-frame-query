@@ -89,6 +89,17 @@
       (update db :re-frame.query/queries dissoc qid)
       db)))
 
+(defn compute-cancelled-status
+  "Return the :status a query should have after cancellation.
+
+   If the query never received a successful response (`:loading`), revert to
+   `:idle`.  Otherwise keep the last finished status (`:success` or `:error`)."
+  [query-data]
+  (let [status (:status query-data)]
+    (if (= :loading status)
+      :idle
+      status)))
+
 (defn cancel-query
   "Cancel any pending request attempts by setting `request-id` on the query data.
   Works by setting a new request-id on the query data, which will trigger the
@@ -124,6 +135,7 @@
       (update-in db [:re-frame.query/queries qid]
                  util/merge-with-default
                  (cond-> {:request-id request-id
+                          :status (compute-cancelled-status query-data)
                           :fetching? false}
                    in-flight? (assoc :stale? true)
                    infinite? (assoc :fetching-next? false

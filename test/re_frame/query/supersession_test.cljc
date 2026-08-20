@@ -280,7 +280,8 @@
       (h/process-event [:re-frame.query/cancel-query
                         :patients/page {:page 1}])
       (let [query (query-entry qid)]
-        (is (= :loading (:status query)))
+        (is (= :idle (:status query))
+            "cancel reverts to :idle when there was no previous success")
         (is (false? (:fetching? query)))
         (is (true? (:stale? query))
             "a cancelled initial request must remain retryable"))

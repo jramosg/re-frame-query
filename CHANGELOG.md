@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - Cancelling an in-flight initial query now leaves its cache entry stale so a
   later `ensure-query` can retry it.
+- Cancelling a query that never received a successful response now reverts the
+  status to `:idle` instead of leaving it at `:loading`.
 
 ## [0.12.0] - 2026-08-14
 
